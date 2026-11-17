@@ -22,6 +22,20 @@
       "when": 1794943408561,
       "tag": "0002_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1794943521574,
+      "tag": "0003_ai",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1794943919724,
+      "tag": "0004_round2",
+      "breakpoints": true
     }
   ]
 }

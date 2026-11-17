@@ -11,6 +11,7 @@ import {
   index,
   uniqueIndex,
   mediumtext,
+  customType,
 } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -76,11 +77,14 @@ export const contacts = mysqlTable(
     companyId: varchar("company_id", { length: 36 }),
     assignedTo: varchar("assigned_to", { length: 36 }),
     chatStatus: mysqlEnum("chat_status", ["open", "closed"]).notNull().default("open"),
+    channel: mysqlEnum("channel", ["whatsapp", "web"]).notNull().default("whatsapp"),
+    webVisitorId: varchar("web_visitor_id", { length: 64 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     uniqueIndex("contacts_phone_uq").on(t.phone),
+    uniqueIndex("contacts_web_visitor_uq").on(t.webVisitorId),
     index("contacts_last_message_idx").on(t.lastMessageAt),
     index("contacts_name_idx").on(t.name),
   ],
@@ -218,6 +222,7 @@ export const messages = mysqlTable(
     error: varchar("error", { length: 500 }).notNull().default(""),
     campaignId: varchar("campaign_id", { length: 36 }),
     sentBy: varchar("sent_by", { length: 36 }),
+    reaction: varchar("reaction", { length: 16 }).notNull().default(""),
     createdAt: createdAt(),
   },
   (t) => [
@@ -249,6 +254,8 @@ export const botRules = mysqlTable(
     active: boolean("active").notNull().default(true),
     priority: int("priority").notNull().default(100),
     hits: int("hits").notNull().default(0),
+    posX: int("pos_x").notNull().default(0),
+    posY: int("pos_y").notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -355,6 +362,154 @@ export const quickReplies = mysqlTable("quick_replies", {
   createdAt: createdAt(),
 });
 
+/* ----------------------------------------------------------------- AI */
+
+export const aiKnowledge = mysqlTable("ai_knowledge", {
+  id: uuid().primaryKey(),
+  kind: mysqlEnum("kind", ["qa", "info"]).notNull().default("qa"),
+  question: varchar("question", { length: 500 }).notNull().default(""),
+  answer: mediumtext("answer").notNull(),
+  source: varchar("source", { length: 255 }).notNull().default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const aiUsage = mysqlTable(
+  "ai_usage",
+  {
+    id: uuid().primaryKey(),
+    contactId: varchar("contact_id", { length: 36 }),
+    model: varchar("model", { length: 128 }).notNull(),
+    promptTokens: int("prompt_tokens").notNull().default(0),
+    completionTokens: int("completion_tokens").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("ai_usage_created_idx").on(t.createdAt)],
+);
+
+export type AiKnowledge = typeof aiKnowledge.$inferSelect;
+/* ------------------------------------------------------ automations */
+
+export type AutomationTrigger =
+  | { type: "contact.created" }
+  | { type: "message.received"; keywords?: string; matchType?: "exact" | "contains" | "starts" }
+  | { type: "contact.list_added"; listId: string }
+  | { type: "chat.assigned" }
+  | { type: "campaign.completed" };
+
+export type AutomationStep =
+  | { type: "send_text"; text: string }
+  | { type: "send_template"; templateId: string; body: string[] }
+  | { type: "add_to_list"; listId: string }
+  | { type: "remove_from_list"; listId: string }
+  | { type: "assign"; userId: string | null }
+  | { type: "close_chat" }
+  | { type: "pause_bot"; hours: number }
+  | { type: "add_note"; text: string }
+  | { type: "create_task"; title: string; dueInHours?: number }
+  | { type: "webhook"; url: string }
+  | { type: "wait"; minutes: number };
+
+export const automations = mysqlTable("automations", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  trigger: json("trigger").$type<AutomationTrigger>().notNull(),
+  steps: json("steps").$type<AutomationStep[]>().notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  runs: int("runs").notNull().default(0),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const automationRuns = mysqlTable(
+  "automation_runs",
+  {
+    id: uuid().primaryKey(),
+    automationId: varchar("automation_id", { length: 36 }).notNull(),
+    contactId: varchar("contact_id", { length: 36 }),
+    stepIndex: int("step_index").notNull().default(0),
+    status: mysqlEnum("status", ["waiting", "running", "done", "failed"]).notNull().default("running"),
+    resumeAt: datetime("resume_at", { mode: "date" }),
+    error: varchar("error", { length: 500 }).notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("automation_runs_status_resume_idx").on(t.status, t.resumeAt), index("automation_runs_automation_idx").on(t.automationId)],
+);
+
+/* ---------------------------------------------------- notifications */
+
+export const notifications = mysqlTable(
+  "notifications",
+  {
+    id: uuid().primaryKey(),
+    userId: varchar("user_id", { length: 36 }).notNull(),
+    type: varchar("type", { length: 32 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    body: varchar("body", { length: 500 }).notNull().default(""),
+    link: varchar("link", { length: 255 }).notNull().default(""),
+    readAt: datetime("read_at", { mode: "date" }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.readAt, t.createdAt)],
+);
+
+/* ------------------------------------------------------- media store */
+
+const longblob = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "longblob" });
+
+export const mediaFiles = mysqlTable("media_files", {
+  // WhatsApp media id (or our own uuid for uploads / web chat)
+  id: varchar("id", { length: 128 }).primaryKey(),
+  mime: varchar("mime", { length: 128 }).notNull(),
+  filename: varchar("filename", { length: 255 }).notNull().default(""),
+  size: int("size").notNull().default(0),
+  data: longblob("data").notNull(),
+  createdAt: createdAt(),
+});
+
+/* ------------------------------------------- auth tokens, api, hooks */
+
+export const authTokens = mysqlTable("auth_tokens", {
+  // sha256 of the token in the link
+  id: varchar("id", { length: 64 }).primaryKey(),
+  kind: mysqlEnum("kind", ["reset", "invite"]).notNull(),
+  userId: varchar("user_id", { length: 36 }),
+  email: varchar("email", { length: 191 }).notNull().default(""),
+  role: mysqlEnum("role", ["admin", "agent"]).notNull().default("agent"),
+  expiresAt: datetime("expires_at", { mode: "date" }).notNull(),
+  usedAt: datetime("used_at", { mode: "date" }),
+  createdAt: createdAt(),
+});
+
+export const apiKeys = mysqlTable("api_keys", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  prefix: varchar("prefix", { length: 16 }).notNull(),
+  keyHash: varchar("key_hash", { length: 64 }).notNull().unique(),
+  lastUsedAt: datetime("last_used_at", { mode: "date" }),
+  createdBy: varchar("created_by", { length: 36 }),
+  createdAt: createdAt(),
+});
+
+export const webhookEndpoints = mysqlTable("webhook_endpoints", {
+  id: uuid().primaryKey(),
+  url: varchar("url", { length: 500 }).notNull(),
+  secret: varchar("secret", { length: 128 }).notNull(),
+  events: json("events").$type<string[]>().notNull().default([]),
+  active: boolean("active").notNull().default(true),
+  lastStatus: int("last_status"),
+  lastError: varchar("last_error", { length: 500 }).notNull().default(""),
+  lastAt: datetime("last_at", { mode: "date" }),
+  createdAt: createdAt(),
+});
+
+export type Automation = typeof automations.$inferSelect;
+export type AutomationRun = typeof automationRuns.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
 export type Company = typeof companies.$inferSelect;
 export type Pipeline = typeof pipelines.$inferSelect;
 export type PipelineStage = typeof pipelineStages.$inferSelect;

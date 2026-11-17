@@ -17,9 +17,27 @@ export type AppSettings = {
   throttlePerMinute: number;
   botEnabled: boolean;
   botPauseHours: number;
+  aiEnabled: boolean;
+  aiBaseUrl: string;
+  aiModel: string;
+  aiApiKey: string; // decrypted
+  aiSystemPrompt: string;
+  aiMaxRepliesPerChat: number;
+  aiVision: boolean;
+  aiTranscribe: boolean;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string; // decrypted
+  smtpFrom: string;
+  widgetEnabled: boolean;
+  widgetTitle: string;
+  widgetGreeting: string;
+  widgetColor: string;
+  mediaStoreMaxMb: number;
 };
 
-const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret"]);
+const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret", "aiApiKey", "smtpPass"]);
 const DEFAULTS: AppSettings = {
   waPhoneNumberId: "",
   waBusinessAccountId: "",
@@ -33,6 +51,24 @@ const DEFAULTS: AppSettings = {
   throttlePerMinute: 60,
   botEnabled: false,
   botPauseHours: 12,
+  aiEnabled: false,
+  aiBaseUrl: "https://api.openai.com/v1",
+  aiModel: "gpt-4o-mini",
+  aiApiKey: "",
+  aiSystemPrompt: "",
+  aiMaxRepliesPerChat: 20,
+  aiVision: false,
+  aiTranscribe: false,
+  smtpHost: "",
+  smtpPort: 587,
+  smtpUser: "",
+  smtpPass: "",
+  smtpFrom: "",
+  widgetEnabled: false,
+  widgetTitle: "Chat with us",
+  widgetGreeting: "Hi! How can we help you?",
+  widgetColor: "#1961ed",
+  mediaStoreMaxMb: 16,
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -43,7 +79,9 @@ export async function getSettings(): Promise<AppSettings> {
     let v: unknown = SECRET_KEYS.has(r.key) ? safeDecrypt(r.value) : r.value;
     if (r.key === "throttlePerMinute") v = Math.max(1, Number(v) || DEFAULTS.throttlePerMinute);
     if (r.key === "botPauseHours") v = Math.max(1, Number(v) || DEFAULTS.botPauseHours);
-    if (r.key === "botEnabled") v = v === "true";
+    if (["botEnabled", "aiEnabled", "aiVision", "aiTranscribe", "widgetEnabled"].includes(r.key)) v = v === "true";
+    if (r.key === "smtpPort" || r.key === "mediaStoreMaxMb") v = Number(v) || (DEFAULTS as any)[r.key];
+    if (r.key === "aiMaxRepliesPerChat") v = Math.max(1, Number(v) || DEFAULTS.aiMaxRepliesPerChat);
     out[r.key] = v;
   }
   return out as AppSettings;

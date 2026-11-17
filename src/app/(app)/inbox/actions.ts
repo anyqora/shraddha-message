@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { contacts, templates } from "@/db/schema";
+import { contacts, templates, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { errorMessage, waClient } from "@/lib/whatsapp";
 import { recordOutbound } from "@/lib/messaging";
@@ -79,4 +79,30 @@ export async function sendChatTemplate(contactId: string, templateId: string, pa
   }
   revalidatePath(`/inbox/${contactId}`);
   return { ok: true, message: "" };
+}
+
+export async function assignChat(contactId: string, userId: string | null) {
+  await requireUser();
+  if (userId) {
+    const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!u) throw new Error("User not found");
+  }
+  await db.update(contacts).set({ assignedTo: userId }).where(eq(contacts.id, contactId));
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${contactId}`);
+}
+
+export async function assignChatToMe(contactId: string) {
+  const user = await requireUser();
+  await db.update(contacts).set({ assignedTo: user.id }).where(eq(contacts.id, contactId));
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${contactId}`);
+}
+
+export async function setChatStatus(contactId: string, status: "open" | "closed") {
+  await requireUser();
+  if (status !== "open" && status !== "closed") throw new Error("Invalid status");
+  await db.update(contacts).set({ chatStatus: status }).where(eq(contacts.id, contactId));
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${contactId}`);
 }

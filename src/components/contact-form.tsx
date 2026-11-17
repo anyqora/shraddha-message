@@ -9,11 +9,16 @@ export function ContactForm({
   lists,
   memberOf,
   action,
+  companies,
+  defaultCompanyId,
 }: {
   contact?: Contact;
   lists: List[];
   memberOf: string[];
   action: (fd: FormData) => Promise<void>;
+  /** When provided, a Company select is shown and companyId is persisted. */
+  companies?: { id: string; name: string }[];
+  defaultCompanyId?: string;
 }) {
   const [custom, setCustom] = useState<[string, string][]>(Object.entries(contact?.custom ?? {}));
   return (
@@ -29,10 +34,22 @@ export function ContactForm({
           <span className="label">Name</span>
           <input name="name" defaultValue={contact?.name} className="input" />
         </label>
-        <label className="block sm:col-span-2">
+        <label className={companies ? "block" : "block sm:col-span-2"}>
           <span className="label">Email</span>
           <input name="email" type="email" defaultValue={contact?.email} className="input" />
         </label>
+        {companies && (
+          <label className="block">
+            <span className="label">Company</span>
+            <input type="hidden" name="company_present" value="1" />
+            <select name="companyId" defaultValue={contact?.companyId ?? defaultCompanyId ?? ""} className="input">
+              <option value="">No company</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div>

@@ -18,6 +18,10 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconRobot,
+  IconBuilding,
+  IconTargetArrow,
+  IconChecklist,
+  IconSparkles,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./ui";
@@ -35,11 +39,20 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: "CRM",
+    items: [
+      { href: "/companies", label: "Companies", icon: IconBuilding, tint: "#0c8599" },
+      { href: "/deals", label: "Deals", icon: IconTargetArrow, tint: "#2f9e44" },
+      { href: "/tasks", label: "Tasks", icon: IconChecklist, tint: "#1961ed" },
+    ],
+  },
+  {
     title: "Messaging",
     items: [
-      { href: "/templates", label: "Templates", icon: IconTemplate, tint: "#0c8599" },
+      { href: "/templates", label: "Templates", icon: IconTemplate, tint: "#495057" },
       { href: "/campaigns", label: "Campaigns", icon: IconSpeakerphone, tint: "#d6336c" },
       { href: "/chatbot", label: "Chatbot", icon: IconRobot, tint: "#b08800" },
+      { href: "/ai", label: "AI Assistant", icon: IconSparkles, tint: "#7048e8" },
     ],
   },
 ];

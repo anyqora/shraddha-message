@@ -29,6 +29,7 @@ export async function saveContact(formData: FormData) {
     name: String(formData.get("name") ?? "").trim(),
     email: String(formData.get("email") ?? "").trim(),
     custom,
+    ...(formData.has("company_present") ? { companyId: String(formData.get("companyId") ?? "").trim() || null } : {}),
   };
   let cid = id;
   try {
@@ -47,6 +48,7 @@ export async function saveContact(formData: FormData) {
     if (listIds.length) await db.insert(listMembers).values(listIds.map((listId) => ({ listId, contactId: cid }))).onDuplicateKeyUpdate({ set: { listId: sql`list_id` } });
   }
   revalidatePath("/contacts");
+  revalidatePath("/companies", "layout");
   redirect(`/contacts/${cid}?saved=1`);
 }
 

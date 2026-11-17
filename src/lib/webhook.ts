@@ -98,6 +98,7 @@ export async function handleWebhook(payload: any) {
           lastInboundAt: at,
           lastMessagePreview: previewOf(m.type, body, media),
           unreadCount: sql`${contacts.unreadCount} + 1`,
+          chatStatus: "open",
         };
         if (m.type === "text" && OPT_OUT.test(text)) Object.assign(patch, { optedOut: true, optedOutAt: new Date() });
         if (m.type === "text" && OPT_IN.test(text)) Object.assign(patch, { optedOut: false, optedOutAt: null });

@@ -5,6 +5,7 @@ import { botRules, contacts, type BotRule, type Contact } from "@/db/schema";
 import { getSettings } from "./settings";
 import { waClient, errorMessage } from "./whatsapp";
 import { recordOutbound } from "./messaging";
+import { aiReply } from "./ai";
 
 const WELCOME_GAP_MS = 24 * 3600 * 1000;
 
@@ -130,7 +131,8 @@ export async function runChatbot(contactId: string, text: string, replyId: strin
   if (!chosen && (!previousInboundAt || Date.now() - previousInboundAt.getTime() > WELCOME_GAP_MS)) {
     chosen = rules.find((r) => r.trigger === "welcome");
   }
-  // 4. fallback
+  // 4. AI assistant (preferred over the fallback rule when enabled), then the fallback rule
+  if (!chosen && s.aiEnabled && (await aiReply(contactId, text)) !== null) return;
   if (!chosen) chosen = rules.find((r) => r.trigger === "fallback");
   if (!chosen) return;
   await sendRule(chosen, contact);
