@@ -6,8 +6,10 @@ import { requireUser } from "@/lib/auth";
 import { Page } from "@/components/ui";
 import { ProductForm } from "@/components/product-form";
 import { saveProduct } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function NewProductPage() {
+  await requirePagePermission("products.manage");
   await requireUser();
   const cats = await db.selectDistinct({ category: products.category }).from(products).where(ne(products.category, "")).orderBy(asc(products.category));
   return (

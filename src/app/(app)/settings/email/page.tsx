@@ -4,12 +4,14 @@ import { getSettings } from "@/lib/settings";
 import { Notice, Field } from "@/components/ui";
 import { ActionButton } from "@/components/settings-action-button";
 import { saveEmail, testEmail } from "../actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 export default async function EmailSettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  await requirePagePermission("settings.email");
   const sp = await searchParams;
   const me = await requireUser();
   const s = await getSettings();
-  const isAdmin = me.role === "admin";
+  const isAdmin = await can(me, "settings.email");
   return (
     <>
       {sp.saved && <Notice tone="success">Saved.</Notice>}

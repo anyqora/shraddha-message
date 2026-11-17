@@ -7,6 +7,7 @@ import { templates, type TemplateComponent } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { errorMessage, waClient } from "@/lib/whatsapp";
 import { countVars } from "@/lib/template-utils";
+import { assertPermission } from "@/lib/permissions";
 
 export async function syncTemplates(): Promise<{ ok: boolean; message: string }> {
   await requireUser();
@@ -37,7 +38,7 @@ export async function syncTemplates(): Promise<{ ok: boolean; message: string }>
 }
 
 export async function createTemplate(_: unknown, fd: FormData): Promise<{ ok: boolean; message: string }> {
-  await requireUser();
+  await assertPermission("templates.manage");
   try {
     const name = String(fd.get("name") ?? "").trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
     if (!name) throw new Error("Template name is required (lowercase letters, numbers, underscore).");
@@ -101,7 +102,7 @@ export async function createTemplate(_: unknown, fd: FormData): Promise<{ ok: bo
 }
 
 export async function deleteTemplate(id: string): Promise<{ ok: boolean; message: string }> {
-  await requireUser();
+  await assertPermission("templates.manage");
   const [t] = await db.select().from(templates).where(eq(templates.id, id)).limit(1);
   if (!t) return { ok: true, message: "Already deleted" };
   try {

@@ -9,8 +9,10 @@ import { cn } from "@/lib/utils";
 import { Page } from "@/components/ui";
 import { CrmKanban } from "@/components/crm-kanban";
 import { moveDeal } from "./actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function DealsPage({ searchParams }: { searchParams: Promise<{ pipeline?: string }> }) {
+  await requirePagePermission("deals.manage");
   const sp = await searchParams;
   const all = await ensureDefaultPipeline();
   const pipeline = all.find((p) => p.id === sp.pipeline) ?? all[0];

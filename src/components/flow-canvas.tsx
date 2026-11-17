@@ -25,7 +25,7 @@ import {
   type EdgeChange,
   type OnBeforeDelete,
 } from "@xyflow/react";
-import { IconPlus, IconLayoutDistributeVertical, IconList, IconX, IconUserShare, IconLoader2, IconBolt } from "@tabler/icons-react";
+import { IconPlus, IconLayoutDistributeVertical, IconList, IconX, IconUserShare, IconLoader2, IconBolt, IconHelpCircle, IconCalendarEvent, IconAddressBook } from "@tabler/icons-react";
 import type { BotRule } from "@/db/schema";
 import { cn } from "@/lib/utils";
 import { WaText } from "./wa-bubble";
@@ -40,7 +40,13 @@ export type FlowActions = {
   createFlowStep: (x: number, y: number) => Promise<BotRule>;
   saveRuleInline: (id: string, s: unknown, fd: FormData) => Promise<Result>;
   deleteRule: (id: string) => Promise<void>;
+  linkNext: (ruleId: string, nextRuleId: string | null) => Promise<{ ok: boolean; message?: string }>;
 };
+
+const hasNext = (t: BotRule["replyType"]) => t === "question" || t === "book" || t === "lead";
+const NEXT_LABEL: Record<string, string> = { question: "answered", book: "booked", lead: "saved" };
+/** Rules this one can lead to: option links + the next-step link. */
+const childrenOf = (r: BotRule) => [...r.options.map((o) => o.next), hasNext(r.replyType) ? r.nextRuleId : null];
 
 const TRIGGER_STYLE: Record<BotRule["trigger"], { label: string; strip: string; chip: string; dot: string }> = {
   welcome: { label: "Welcome", strip: "bg-[#e3f5e8] border-[#c9ecd3]", chip: "bg-white/70 text-[#2f9e44]", dot: "#2f9e44" },
@@ -60,7 +66,7 @@ const RuleNodeView = memo(function RuleNodeView({ id, data, selected }: NodeProp
   const r = data.rule;
   const t = TRIGGER_STYLE[r.trigger];
   const updateInternals = useUpdateNodeInternals();
-  const optKey = r.options.map((o) => o.title).join("|") + r.replyType;
+  const optKey = r.options.map((o) => o.title).join("|") + r.replyType + (r.nextRuleId ?? "");
   useEffect(() => updateInternals(id), [id, optKey, updateInternals]);
   const kws = r.trigger === "keyword" ? r.keywords.split(",").filter(Boolean) : [];
 
@@ -124,6 +130,28 @@ const RuleNodeView = memo(function RuleNodeView({ id, data, selected }: NodeProp
         </div>
       )}
 
+      {hasNext(r.replyType) && (
+        <div className="border-t border-[#f1f1f1]">
+          <div className="flex items-center gap-1.5 px-2.5 pt-1.5 text-[11px] text-[#666]">
+            {r.replyType === "question" && (
+              <><IconHelpCircle size={12} className="text-[#7048e8]" /> Waits for an answer → <span className="truncate font-mono text-[10.5px] text-[#333]">{r.saveTo || "?"}</span>{r.validation !== "none" && <span className="text-[#999]">· {r.validation}</span>}</>
+            )}
+            {r.replyType === "book" && <><IconCalendarEvent size={12} className="text-[#0c8599]" /> Offers free slots{r.header ? ` · ${r.header}` : ""}</>}
+            {r.replyType === "lead" && <><IconAddressBook size={12} className="text-[#2f9e44]" /> Saves a lead</>}
+          </div>
+          <div className="relative flex h-8 items-center justify-between gap-2 px-2.5">
+            <span className="text-[#027eb5]">Next</span>
+            {!r.nextRuleId && <span className="shrink-0 text-[11px] text-[#b3b3b3]">{r.replyType === "question" ? "ends form" : "no next"}</span>}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="next"
+              className="!h-3 !w-3 !border-2 !border-white !bg-[#7048e8] !shadow-[0_0_0_1px_#7048e8]"
+            />
+          </div>
+        </div>
+      )}
+
       {(r.handoff || r.hits > 0) && (
         <div className="flex items-center gap-2 border-t border-[#f1f1f1] px-2.5 py-1 text-[11px] text-[#999]">
           {r.handoff && (
@@ -141,13 +169,13 @@ const nodeTypes = { rule: RuleNodeView };
 /* ---------------------------------------------------------------- layout */
 
 function estimateHeight(r: BotRule) {
-  return 96 + (r.trigger === "keyword" ? 20 : 0) + (r.options.length ? r.options.length * 32 + (r.replyType === "list" ? 20 : 0) : 0) + (r.handoff || r.hits ? 24 : 0);
+  return 96 + (r.trigger === "keyword" ? 20 : 0) + (r.options.length ? r.options.length * 32 + (r.replyType === "list" ? 20 : 0) : 0) + (hasNext(r.replyType) ? 54 : 0) + (r.handoff || r.hits ? 24 : 0);
 }
 
 /** Left-to-right layering: BFS from welcome/keyword roots, then any unreached steps, fallback last. */
 function autoLayout(rules: BotRule[]): Map<string, { x: number; y: number }> {
   const byId = new Map(rules.map((r) => [r.id, r]));
-  const incoming = new Set(rules.flatMap((r) => r.options.map((o) => o.next).filter((n): n is string => !!n && byId.has(n))));
+  const incoming = new Set(rules.flatMap((r) => childrenOf(r).filter((n): n is string => !!n && byId.has(n))));
   const order = { welcome: 0, keyword: 1, menu: 2, fallback: 3 } as const;
   const sorted = [...rules].sort((a, b) => order[a.trigger] - order[b.trigger] || a.priority - b.priority);
   const layer = new Map<string, number>();
@@ -157,8 +185,8 @@ function autoLayout(rules: BotRule[]): Map<string, { x: number; y: number }> {
     while (q.length) {
       const id = q.shift()!;
       const d = layer.get(id)!;
-      for (const o of byId.get(id)!.options) {
-        if (o.next && byId.has(o.next) && !layer.has(o.next)) { layer.set(o.next, d + 1); q.push(o.next); }
+      for (const n of childrenOf(byId.get(id)!)) {
+        if (n && byId.has(n) && !layer.has(n)) { layer.set(n, d + 1); q.push(n); }
       }
     }
   };
@@ -272,8 +300,30 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
   const ids = useMemo(() => new Set(rules.map((r) => r.id)), [rules]);
   const edges = useMemo<Edge[]>(
     () =>
-      rules.flatMap((r) =>
-        r.options.flatMap((o, i) => {
+      rules.flatMap((r) => [
+        ...(hasNext(r.replyType) && r.nextRuleId && ids.has(r.nextRuleId)
+          ? [(() => {
+              const id = `${r.id}:next`;
+              const sel = selectedEdges.has(id);
+              return {
+                id,
+                source: r.id,
+                sourceHandle: "next",
+                target: r.nextRuleId,
+                targetHandle: "in",
+                animated: true,
+                selected: sel,
+                label: NEXT_LABEL[r.replyType],
+                labelStyle: { fontSize: 11, fill: sel ? "#1961ed" : "#7048e8", fontWeight: 500 },
+                labelBgStyle: { fill: "#fff", stroke: sel ? "#1961ed" : "#e5dbff", strokeWidth: 1 },
+                labelBgPadding: [6, 3] as [number, number],
+                labelBgBorderRadius: 4,
+                style: { stroke: sel ? "#1961ed" : "#b197fc", strokeWidth: sel ? 2 : 1.5, strokeDasharray: "5 3" },
+                markerEnd: { type: MarkerType.ArrowClosed, color: sel ? "#1961ed" : "#b197fc", width: 16, height: 16 },
+              } as Edge;
+            })()]
+          : []),
+        ...r.options.flatMap((o, i) => {
           if (!o.next || !ids.has(o.next)) return [];
           const id = `${r.id}:${i}`;
           const sel = selectedEdges.has(id);
@@ -294,7 +344,7 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
             markerEnd: { type: MarkerType.ArrowClosed, color: sel ? "#1961ed" : "#b3b3b3", width: 16, height: 16 },
           }];
         }),
-      ),
+      ]),
     [rules, ids, selectedEdges],
   );
 
@@ -317,17 +367,29 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
     [rules, actions],
   );
 
+  const setStepNext = useCallback(
+    (ruleId: string, next: string | null) => {
+      const prev = rules;
+      setRules((rs) => rs.map((r) => (r.id === ruleId ? { ...r, nextRuleId: next } : r)));
+      actions.linkNext(ruleId, next).then((res) => {
+        if (!res.ok) { setRules(prev); setError(res.message ?? "Couldn’t update the link."); }
+      }).catch(() => { setRules(prev); setError("Couldn’t update the link."); });
+    },
+    [rules, actions],
+  );
+
   const onConnect = useCallback(
     (c: Connection) => {
-      if (!c.source || !c.target || !c.sourceHandle?.startsWith("opt-")) return;
-      if (c.source === c.target) return;
+      if (!c.source || !c.target || c.source === c.target) return;
+      if (c.sourceHandle === "next") return setStepNext(c.source, c.target);
+      if (!c.sourceHandle?.startsWith("opt-")) return;
       setOptionNext(c.source, Number(c.sourceHandle.slice(4)), c.target);
     },
-    [setOptionNext],
+    [setOptionNext, setStepNext],
   );
 
   const isValidConnection = useCallback(
-    (c: Connection | Edge) => c.source !== c.target && !!c.sourceHandle?.startsWith("opt-") && c.targetHandle === "in",
+    (c: Connection | Edge) => c.source !== c.target && (c.sourceHandle === "next" || !!c.sourceHandle?.startsWith("opt-")) && c.targetHandle === "in",
     [],
   );
 
@@ -337,11 +399,12 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
     (es: Edge[]) => {
       for (const e of es) {
         const [ruleId, idx] = e.id.split(":");
-        setOptionNext(ruleId, Number(idx), null);
+        if (idx === "next") setStepNext(ruleId, null);
+        else setOptionNext(ruleId, Number(idx), null);
       }
       setSelectedEdges(new Set());
     },
-    [setOptionNext],
+    [setOptionNext, setStepNext],
   );
 
   const onNodeDragStop = useCallback(
@@ -385,7 +448,11 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
     if (!confirm(`Delete step “${open.name}”? Options pointing to it will be unlinked.`)) return;
     const id = open.id;
     setOpenId(null);
-    setRules((rs) => rs.filter((r) => r.id !== id).map((r) => ({ ...r, options: r.options.map((o) => (o.next === id ? { ...o, next: null } : o)) })));
+    setRules((rs) =>
+      rs
+        .filter((r) => r.id !== id)
+        .map((r) => ({ ...r, nextRuleId: r.nextRuleId === id ? null : r.nextRuleId, options: r.options.map((o) => (o.next === id ? { ...o, next: null } : o)) })),
+    );
     actions.deleteRule(id).catch(() => setError("Couldn’t delete the step."));
   };
 
@@ -437,7 +504,7 @@ function FlowInner({ initialRules, actions }: { initialRules: BotRule[]; actions
         </Panel>
         <Panel position="bottom-center">
           <div className="rounded-md border border-[#ebebeb] bg-white/90 px-2.5 py-1 text-[11px] text-ink-3 shadow-sm">
-            Drag an option’s blue dot onto a step to link it · select a link and press Delete to remove it · click a step to edit
+            Drag an option’s blue dot (or a step’s purple “Next” dot) onto a step to link it · select a link and press Delete to remove it · click a step to edit
           </div>
         </Panel>
         {error && (

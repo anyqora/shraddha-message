@@ -6,8 +6,10 @@ import { segmentWhere } from "@/lib/segments";
 import { Page } from "@/components/ui";
 import { CampaignWizard } from "@/components/campaign-wizard";
 import { createCampaign } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function NewCampaign({ searchParams }: { searchParams: Promise<{ list?: string; segment?: string }> }) {
+  await requirePagePermission("campaigns.send");
   const { list, segment } = await searchParams;
   const [tpls, ls, keys] = await Promise.all([
     db.select().from(templates).where(eq(templates.status, "APPROVED")).orderBy(asc(templates.name)),

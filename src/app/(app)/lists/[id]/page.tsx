@@ -9,8 +9,11 @@ import { ContactsTable } from "@/components/contacts-table";
 import { loadContactRows } from "@/lib/contacts-query";
 import { addToList, deleteContacts, removeFromList } from "../../contacts/actions";
 import { deleteList, updateList } from "../actions";
+import { can } from "@/lib/permissions";
+import { requireUser } from "@/lib/auth";
 
 export default async function ListPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ page?: string }> }) {
+  const canDelete = await can(await requireUser(), "contacts.delete");
   const { id } = await params;
   const page = Math.max(1, Number((await searchParams).page) || 1);
   const [l] = await db.select().from(lists).where(eq(lists.id, id)).limit(1);
@@ -40,7 +43,7 @@ export default async function ListPage({ params, searchParams }: { params: Promi
         <span className="ml-auto text-sm text-ink-3">{total.toLocaleString("en-IN")} contacts</span>
       </form>
       {rows.length ? (
-        <ContactsTable rows={rows} lists={all} onDelete={deleteContacts} onAddToList={addToList} onRemoveFromList={removeFromList} currentListId={id} />
+        <ContactsTable rows={rows} lists={all} onDelete={canDelete ? deleteContacts : undefined} onAddToList={addToList} onRemoveFromList={removeFromList} currentListId={id} />
       ) : (
         <Empty icon={<IconList />} title="This list is empty" hint="Select contacts on the Contacts page and use “Add to list”, or import a file into this list." action={<Link href="/contacts/import" className="btn">Import contacts</Link>} />
       )}

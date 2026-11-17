@@ -16,6 +16,7 @@ import { markRead } from "@/lib/messaging";
 import { formatPhone } from "@/lib/phone";
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import { inboxRestricted } from "@/lib/permissions";
 import { InboxContactPanel } from "@/components/inbox-contact-panel";
 import { InboxAssign, InboxBotToggle, InboxStatusButton } from "@/components/inbox-chat-actions";
 import { assignChat, sendChatMessage, sendChatTemplate, setChatStatus, toggleBot } from "../actions";
@@ -39,6 +40,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
   const me = await requireUser();
   const [c] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
   if (!c) notFound();
+  if (c.assignedTo && c.assignedTo !== me.id && (await inboxRestricted(me))) notFound();
   if (c.unreadCount) await markRead(id);
   const [msgs, tpls, team, qrs, settings] = await Promise.all([
     db.select().from(messages).where(eq(messages.contactId, id)).orderBy(desc(messages.createdAt)).limit(300),

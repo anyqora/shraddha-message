@@ -8,11 +8,13 @@ import { Page, Notice, Chip, Stat } from "@/components/ui";
 import { WidgetSettingsForm } from "@/components/widget-settings-form";
 import { WidgetSnippet } from "@/components/widget-snippet";
 import { saveWidgetSettings } from "./actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 export default async function WidgetPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  await requirePagePermission("widget.manage");
   const sp = await searchParams;
   const me = await requireUser();
-  const isAdmin = me.role === "admin";
+  const isAdmin = await can(me, "widget.manage");
   const [s, [stats]] = await Promise.all([
     getSettings(),
     db

@@ -6,8 +6,10 @@ import { requireUser } from "@/lib/auth";
 import { Page } from "@/components/ui";
 import { PaymentLinkForm } from "@/components/payment-actions";
 import { createPaymentLinkAction, getPaymentConfig, searchPaymentContacts } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function NewPaymentLinkPage({ searchParams }: { searchParams: Promise<{ contact?: string }> }) {
+  await requirePagePermission("payments.manage");
   await requireUser();
   const sp = await searchParams;
   const [config, initial] = await Promise.all([

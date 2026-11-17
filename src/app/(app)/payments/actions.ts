@@ -13,6 +13,7 @@ import { cancelPaymentLink } from "@/lib/razorpay";
 import { createAndSendPaymentLink, markPaymentLinkPaid, refreshPaymentLink } from "@/lib/payments";
 import { errorMessage } from "@/lib/whatsapp";
 import { rupeesToPaise } from "@/components/payment-money";
+import { assertPermission } from "@/lib/permissions";
 
 type Result = { ok: boolean; message: string; url?: string };
 
@@ -43,7 +44,7 @@ function revalidate(contactId?: string | null) {
 
 /** /payments/new form. */
 export async function createPaymentLinkAction(_: unknown, fd: FormData): Promise<Result> {
-  const user = await requireUser();
+  const user = await assertPermission("payments.manage");
   let contactId = String(fd.get("contactId") ?? "").trim();
   const phoneRaw = String(fd.get("phone") ?? "").trim();
   if (!contactId) {
@@ -99,7 +100,7 @@ export async function refreshOpenPayments(): Promise<Result> {
 }
 
 export async function markPaymentPaid(id: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("payments.manage");
   const [row] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, id)).limit(1);
   if (!row) return { ok: false, message: "Not found" };
   await markPaymentLinkPaid(row);
@@ -108,7 +109,7 @@ export async function markPaymentPaid(id: string): Promise<Result> {
 }
 
 export async function cancelPayment(id: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("payments.manage");
   const [row] = await db.select().from(paymentLinks).where(eq(paymentLinks.id, id)).limit(1);
   if (!row) return { ok: false, message: "Not found" };
   if (row.status !== "created") return { ok: false, message: `Already ${row.status}.` };
@@ -125,7 +126,7 @@ export async function cancelPayment(id: string): Promise<Result> {
 }
 
 export async function savePaymentSettings(fd: FormData) {
-  await requireAdmin();
+  await assertPermission("payments.manage");
   const s = (k: string) => String(fd.get(k) ?? "").trim();
   const patch: Record<string, string> = { razorpayKeyId: s("razorpayKeyId"), upiId: s("upiId"), upiName: s("upiName") };
   if (s("razorpayKeySecret")) patch.razorpayKeySecret = s("razorpayKeySecret");
@@ -136,7 +137,7 @@ export async function savePaymentSettings(fd: FormData) {
 }
 
 export async function testRazorpay(): Promise<Result> {
-  await requireAdmin();
+  await assertPermission("payments.manage");
   const s = await getSettings();
   if (!s.razorpayKeyId || !s.razorpayKeySecret) return { ok: false, message: "Save the Key ID and Key Secret first." };
   try {

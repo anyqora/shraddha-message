@@ -20,6 +20,7 @@ import {
   toggleKnowledge,
   updateKnowledge,
 } from "./actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 const ERR: Record<string, string> = {
   entry: "A Q&A entry needs a question and an answer; business info needs some text.",
@@ -32,9 +33,10 @@ export default async function AiPage({
 }: {
   searchParams: Promise<{ saved?: string; error?: string; edit?: string; imported?: string; pdfChunks?: string; pdfFailed?: string }>;
 }) {
+  await requirePagePermission("ai.manage");
   const sp = await searchParams;
   const me = await requireUser();
-  const isAdmin = me.role === "admin";
+  const isAdmin = await can(me, "ai.manage");
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
 
   const [s, entries, sources, byModel, [replies]] = await Promise.all([

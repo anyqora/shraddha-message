@@ -2,26 +2,28 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq, ne } from "drizzle-orm";
+import { eq, ne, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { botRules, type BotOption, type BotRule } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { saveSettings } from "@/lib/settings";
-import { validateRule, type RuleInput } from "./validate";
+import { hasOptions, usesNext, validateRule, type RuleInput } from "./validate";
 
 type Result = { ok: boolean; message: string } | null;
 
 const TRIGGERS = ["keyword", "welcome", "fallback", "menu"] as const;
 const MATCHES = ["exact", "contains", "starts"] as const;
-const REPLIES = ["text", "buttons", "list"] as const;
+const REPLIES = ["text", "buttons", "list", "question", "book", "lead"] as const;
+const VALIDATIONS = ["none", "email", "phone", "number", "date"] as const;
 const pick = <T extends string>(v: unknown, list: readonly T[], d: T): T => (list.includes(v as T) ? (v as T) : d);
 
 function parseRule(fd: FormData): RuleInput {
   const s = (k: string) => String(fd.get(k) ?? "");
   const replyType = pick(s("replyType"), REPLIES, "text");
   const trigger = pick(s("trigger"), TRIGGERS, "keyword");
+  const withOptions = hasOptions(replyType);
   let options: BotOption[] = [];
-  if (replyType !== "text") {
+  if (withOptions) {
     try {
       const raw = JSON.parse(s("options") || "[]") as unknown;
       if (Array.isArray(raw))
@@ -34,17 +36,21 @@ function parseRule(fd: FormData): RuleInput {
       options = [];
     }
   }
+  const keepHeader = withOptions || replyType === "book";
   return {
     name: s("name").trim(),
     trigger,
     keywords: trigger === "keyword" ? s("keywords").split(",").map((k) => k.trim()).filter(Boolean).join(",") : "",
     matchType: pick(s("matchType"), MATCHES, "contains"),
     replyType,
-    header: replyType === "text" ? "" : s("header").trim(),
+    header: keepHeader ? s("header").trim() : "",
     body: s("body").trim(),
-    footer: replyType === "text" ? "" : s("footer").trim(),
-    listButton: s("listButton").trim() || "Menu",
+    footer: keepHeader ? s("footer").trim() : "",
+    listButton: s("listButton").trim() || (replyType === "book" ? "Pick a slot" : "Menu"),
     options,
+    saveTo: replyType === "question" ? s("saveTo").trim().slice(0, 100) : "",
+    validation: replyType === "question" ? pick(s("validation"), VALIDATIONS, "none") : "none",
+    nextRuleId: usesNext(replyType) ? s("nextRuleId").trim() || null : null,
     handoff: fd.get("handoff") === "on",
     active: fd.get("active") === "on",
     priority: Math.max(0, Math.min(100000, Math.round(Number(s("priority")) || 100))),
@@ -58,6 +64,7 @@ async function persistRule(id: string | null, fd: FormData): Promise<{ ok: false
   // drop references to self or unknown rules
   const ids = new Set((await db.select({ id: botRules.id }).from(botRules)).map((x) => x.id));
   r.options = r.options.map((o) => ({ ...o, next: o.next && ids.has(o.next) && o.next !== id ? o.next : null }));
+  if (r.nextRuleId && (!ids.has(r.nextRuleId) || r.nextRuleId === id)) r.nextRuleId = null;
   try {
     if (id) {
       await db.update(botRules).set(r).where(eq(botRules.id, id));
@@ -119,6 +126,22 @@ export async function linkOption(ruleId: string, optionIndex: number, nextRuleId
   return { ok: true, options };
 }
 
+/** Sets (or clears) the "next step" of a question / booking / lead step — used by the flow canvas. */
+export async function linkNext(ruleId: string, nextRuleId: string | null): Promise<{ ok: boolean; message?: string }> {
+  await requireUser();
+  const [rule] = await db.select({ id: botRules.id, replyType: botRules.replyType }).from(botRules).where(eq(botRules.id, ruleId)).limit(1);
+  if (!rule) return { ok: false, message: "Step not found." };
+  if (!usesNext(rule.replyType)) return { ok: false, message: "Only question, booking and lead steps have a next step." };
+  if (nextRuleId) {
+    if (nextRuleId === ruleId) return { ok: false, message: "A step can’t lead to itself." };
+    const [target] = await db.select({ id: botRules.id }).from(botRules).where(eq(botRules.id, nextRuleId)).limit(1);
+    if (!target) return { ok: false, message: "Target step not found." };
+  }
+  await db.update(botRules).set({ nextRuleId }).where(eq(botRules.id, ruleId));
+  revalidatePath("/chatbot");
+  return { ok: true };
+}
+
 /** Creates a blank "menu" step at a canvas position and returns it. */
 export async function createFlowStep(x: number, y: number): Promise<BotRule> {
   await requireUser();
@@ -141,6 +164,7 @@ export async function createFlowStep(x: number, y: number): Promise<BotRule> {
 export async function deleteRule(id: string) {
   await requireUser();
   await db.delete(botRules).where(eq(botRules.id, id));
+  await db.update(botRules).set({ nextRuleId: null }).where(eq(botRules.nextRuleId, id));
   // clear "next" links that pointed at the deleted rule
   const rest = await db.select({ id: botRules.id, options: botRules.options }).from(botRules).where(ne(botRules.id, id));
   for (const r of rest) {
@@ -240,4 +264,109 @@ export async function createStarterBot(): Promise<void> {
     },
   ]);
   revalidatePath("/chatbot");
+}
+
+/* ------------------------------------------------------------- recipes */
+
+/** y position below everything already on the flow canvas. */
+async function canvasBottom(): Promise<number> {
+  const [r] = await db.select({ y: sql<number>`coalesce(max(${botRules.posY}), -360)` }).from(botRules);
+  return Number(r?.y ?? -360) + 360;
+}
+
+/** Ask name → requirement → city → save lead. Started by the keywords enquiry / quote / callback. */
+export async function createLeadFormRecipe(): Promise<void> {
+  await requireUser();
+  const y = await canvasBottom();
+  const id = { name: crypto.randomUUID(), need: crypto.randomUUID(), city: crypto.randomUUID(), save: crypto.randomUUID() };
+  const X = 384;
+  await db.insert(botRules).values([
+    {
+      id: id.name,
+      name: "Lead form: ask name",
+      trigger: "keyword",
+      keywords: "enquiry,inquiry,quote,callback,call back",
+      matchType: "contains",
+      replyType: "question",
+      body: "Sure, happy to help! 😊 May I know your name?",
+      saveTo: "name",
+      nextRuleId: id.need,
+      priority: 20,
+      posX: 0,
+      posY: y,
+    },
+    {
+      id: id.need,
+      name: "Lead form: ask requirement",
+      trigger: "menu",
+      replyType: "question",
+      body: "Thanks {{name}}! What do you need help with?",
+      saveTo: "answer:requirement",
+      nextRuleId: id.city,
+      priority: 50,
+      posX: X,
+      posY: y,
+    },
+    {
+      id: id.city,
+      name: "Lead form: ask city",
+      trigger: "menu",
+      replyType: "question",
+      body: "Got it. Which city are you in?",
+      saveTo: "custom:City",
+      nextRuleId: id.save,
+      priority: 50,
+      posX: X * 2,
+      posY: y,
+    },
+    {
+      id: id.save,
+      name: "Chatbot enquiry",
+      trigger: "menu",
+      replyType: "lead",
+      body: "Thanks {{name}}, our team will call you shortly. 🙏",
+      priority: 50,
+      posX: X * 3,
+      posY: y,
+    },
+  ]);
+  revalidatePath("/chatbot");
+  revalidatePath("/chatbot/flow");
+}
+
+/** Ask name → offer slots → booked. Started by the keywords book / appointment. */
+export async function createBookingRecipe(): Promise<void> {
+  await requireUser();
+  const y = await canvasBottom();
+  const id = { name: crypto.randomUUID(), book: crypto.randomUUID() };
+  await db.insert(botRules).values([
+    {
+      id: id.name,
+      name: "Booking: ask name",
+      trigger: "keyword",
+      keywords: "book,appointment,booking,slot",
+      matchType: "contains",
+      replyType: "question",
+      body: "Let's book your appointment 📅 What name should we book it under?",
+      saveTo: "name",
+      nextRuleId: id.book,
+      priority: 20,
+      posX: 0,
+      posY: y,
+    },
+    {
+      id: id.book,
+      name: "Book appointment",
+      trigger: "menu",
+      replyType: "book",
+      header: "Consultation",
+      body: "Thanks {{name}}! Please pick a time that suits you 👇",
+      listButton: "Pick a slot",
+      priority: 50,
+      posX: 384,
+      posY: y,
+    },
+  ]);
+  revalidatePath("/chatbot");
+  revalidatePath("/chatbot/flow");
 }

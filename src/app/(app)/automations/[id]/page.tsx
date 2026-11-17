@@ -10,10 +10,12 @@ import { formatDateTime, timeAgo } from "@/lib/utils";
 import { STEP_META } from "../validate";
 import { builderOptions } from "../data";
 import { saveAutomation } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 const RUN_COLOR = { waiting: "blue", running: "purple", done: "green", failed: "red" } as const;
 
 export default async function EditAutomationPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("automations.manage");
   const { id } = await params;
   const [a] = await db.select().from(automations).where(eq(automations.id, id)).limit(1);
   if (!a) notFound();

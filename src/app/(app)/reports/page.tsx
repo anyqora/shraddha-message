@@ -18,6 +18,7 @@ import { Avatar, Notice, Page } from "@/components/ui";
 import { ReportBarChart } from "@/components/report-bar-chart";
 import { ReportPrintButton } from "@/components/report-print-button";
 import { ReportCampaigns } from "@/components/report-campaigns";
+import { requirePagePermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -225,6 +226,7 @@ async function Automation({ r }: { r: ReportRange }) {
 }
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  await requirePagePermission("reports.view");
   await requireUser();
   const sp = await searchParams;
   const tab: Tab = TABS.some((t) => t.key === sp.tab) ? (sp.tab as Tab) : "overview";

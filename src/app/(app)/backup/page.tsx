@@ -2,18 +2,13 @@ import { IconDatabaseExport, IconDownload, IconLock, IconFileTypeCsv } from "@ta
 import { requireUser } from "@/lib/auth";
 import { Empty, Notice, Page } from "@/components/ui";
 import { backupTables, rowCount, EXCLUDED_TABLES, SECRET_SETTING_KEYS, REDACTED_COLUMNS, PAGE_SIZE } from "@/app/api/backup/tables";
+import { requirePagePermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function BackupPage() {
+  await requirePagePermission("backup.download");
   const user = await requireUser();
-  if (user.role !== "admin") {
-    return (
-      <Page title="Backup" icon={<IconDatabaseExport />}>
-        <Empty icon={<IconLock />} title="Admins only" hint="Ask a workspace admin to download a backup." />
-      </Page>
-    );
-  }
   const tables = backupTables();
   const counts = await Promise.all(tables.map((t) => rowCount(t).catch(() => null)));
   const total = counts.reduce<number>((a, b) => a + (b ?? 0), 0);

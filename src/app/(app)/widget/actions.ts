@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { saveSettings } from "@/lib/settings";
+import { assertPermission } from "@/lib/permissions";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
 export async function saveWidgetSettings(fd: FormData) {
-  await requireAdmin();
+  await assertPermission("widget.manage");
   const color = str(fd, "widgetColor");
   await saveSettings({
     widgetEnabled: fd.get("widgetEnabled") === "on",

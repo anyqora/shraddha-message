@@ -5,7 +5,7 @@ import { IconSend } from "@tabler/icons-react";
 import { CopyField } from "./settings-copy";
 import type { ActionResult } from "./settings-action-button";
 
-export function InviteForm({ action }: { action: (fd: FormData) => Promise<ActionResult> }) {
+export function InviteForm({ action, allowAdmin = true }: { action: (fd: FormData) => Promise<ActionResult>; allowAdmin?: boolean }) {
   const [pending, start] = useTransition();
   const [r, setR] = useState<ActionResult | null>(null);
   const ref = useRef<HTMLFormElement>(null);
@@ -28,7 +28,7 @@ export function InviteForm({ action }: { action: (fd: FormData) => Promise<Actio
         <input name="email" type="email" required placeholder="teammate@example.com" className="input" />
         <select name="role" className="input w-auto">
           <option value="agent">Agent</option>
-          <option value="admin">Admin</option>
+          {allowAdmin && <option value="admin">Admin</option>}
         </select>
         <button className="btn btn-primary" disabled={pending}>
           <IconSend size={14} /> {pending ? "Inviting…" : "Invite"}

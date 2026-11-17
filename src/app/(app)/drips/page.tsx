@@ -10,8 +10,10 @@ import { DeleteSequenceButton, DripWishCard, type WishValue } from "@/components
 import { cumulativeHours, dayLabel } from "./shared";
 import { dripOptions } from "./data";
 import { deleteSequence, saveWish, toggleSequence } from "./actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function DripsPage() {
+  await requirePagePermission("drips.manage");
   const [rows, opts, counts, wishes, dated] = await Promise.all([
     db.select().from(dripSequences).orderBy(desc(dripSequences.createdAt)),
     dripOptions(),

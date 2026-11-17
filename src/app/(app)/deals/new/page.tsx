@@ -5,12 +5,14 @@ import { requireUser } from "@/lib/auth";
 import { Notice, Page } from "@/components/ui";
 import { DealForm } from "@/components/crm-deal-form";
 import { saveDeal } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function NewDealPage({
   searchParams,
 }: {
   searchParams: Promise<{ pipeline?: string; stageId?: string; contactId?: string; companyId?: string; return?: string; error?: string }>;
 }) {
+  await requirePagePermission("deals.manage");
   const sp = await searchParams;
   const user = await requireUser();
   const pipelines = await ensureDefaultPipeline();

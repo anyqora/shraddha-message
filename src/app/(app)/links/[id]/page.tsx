@@ -10,8 +10,10 @@ import { Page, Stat } from "@/components/ui";
 import { CopyField } from "@/components/settings-copy";
 import { SegmentDelete } from "@/components/segment-delete";
 import { deleteLink, updateLink } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function LinkDetail({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("links.manage");
   const { id } = await params;
   const [link] = await db.select().from(waLinks).where(eq(waLinks.id, id)).limit(1);
   if (!link) notFound();

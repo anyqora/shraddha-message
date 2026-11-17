@@ -6,6 +6,7 @@ import { eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { waLinks } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
+import { assertPermission } from "@/lib/permissions";
 
 function slugify(s: string) {
   return s
@@ -17,7 +18,7 @@ function slugify(s: string) {
 }
 
 export async function createLink(_: unknown, fd: FormData): Promise<{ ok: boolean; message: string }> {
-  await requireUser();
+  await assertPermission("links.manage");
   let id = "";
   try {
     const name = String(fd.get("name") ?? "").trim().slice(0, 191);
@@ -38,7 +39,7 @@ export async function createLink(_: unknown, fd: FormData): Promise<{ ok: boolea
 }
 
 export async function updateLink(fd: FormData) {
-  await requireUser();
+  await assertPermission("links.manage");
   const id = String(fd.get("id"));
   await db
     .update(waLinks)
@@ -53,7 +54,7 @@ export async function updateLink(fd: FormData) {
 }
 
 export async function deleteLink(id: string) {
-  await requireUser();
+  await assertPermission("links.manage");
   await db.delete(waLinks).where(eq(waLinks.id, id));
   revalidatePath("/links");
   redirect("/links");

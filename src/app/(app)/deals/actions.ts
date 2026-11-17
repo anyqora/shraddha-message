@@ -8,6 +8,7 @@ import { deals, notes, pipelines, pipelineStages, tasks } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { parseIstDate } from "@/lib/crm-utils";
 import { CHIP_COLORS } from "@/components/ui";
+import { assertPermission } from "@/lib/permissions";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 const opt = (fd: FormData, k: string) => str(fd, k) || null;
@@ -20,7 +21,7 @@ function revalidateDeal(d: { id: string; contactId?: string | null; companyId?: 
 }
 
 export async function saveDeal(fd: FormData) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const id = str(fd, "id");
   const title = str(fd, "title").slice(0, 191);
   const stageId = str(fd, "stageId");
@@ -56,7 +57,7 @@ export async function saveDeal(fd: FormData) {
 
 /** Move a deal to `stageId` at index `position`, re-numbering that column. */
 export async function moveDeal(dealId: string, stageId: string, position: number) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const [stage] = await db.select().from(pipelineStages).where(eq(pipelineStages.id, stageId)).limit(1);
   const [deal] = await db.select().from(deals).where(eq(deals.id, dealId)).limit(1);
   if (!stage || !deal) return;
@@ -71,7 +72,7 @@ export async function moveDeal(dealId: string, stageId: string, position: number
 }
 
 export async function deleteDeal(id: string) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const [d] = await db.select().from(deals).where(eq(deals.id, id)).limit(1);
   if (!d) redirect("/deals");
   await db.delete(notes).where(eq(notes.dealId, id));
@@ -88,7 +89,7 @@ const color = (v: string) => (CHIP_COLORS.includes(v) ? v : "gray");
 const kind = (v: string): "open" | "won" | "lost" => (v === "won" || v === "lost" ? v : "open");
 
 export async function addPipeline(fd: FormData) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const name = str(fd, "name").slice(0, 191);
   if (!name) return;
   const [{ m }] = await db.select({ m: sql<number>`coalesce(max(${pipelines.position}), -1)` }).from(pipelines);
@@ -103,14 +104,14 @@ export async function addPipeline(fd: FormData) {
 }
 
 export async function renamePipeline(id: string, fd: FormData) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const name = str(fd, "name").slice(0, 191);
   if (name) await db.update(pipelines).set({ name }).where(eq(pipelines.id, id));
   revalidatePath("/deals", "layout");
 }
 
 export async function addStage(pipelineId: string, fd: FormData) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const name = str(fd, "name").slice(0, 191);
   if (!name) return;
   const [{ m }] = await db.select({ m: sql<number>`coalesce(max(${pipelineStages.position}), -1)` }).from(pipelineStages).where(eq(pipelineStages.pipelineId, pipelineId));
@@ -119,7 +120,7 @@ export async function addStage(pipelineId: string, fd: FormData) {
 }
 
 export async function updateStage(id: string, fd: FormData) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const name = str(fd, "name").slice(0, 191);
   await db
     .update(pipelineStages)
@@ -129,7 +130,7 @@ export async function updateStage(id: string, fd: FormData) {
 }
 
 export async function moveStage(id: string, dir: -1 | 1) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const [s] = await db.select().from(pipelineStages).where(eq(pipelineStages.id, id)).limit(1);
   if (!s) return;
   const all = await db.select().from(pipelineStages).where(eq(pipelineStages.pipelineId, s.pipelineId)).orderBy(asc(pipelineStages.position));
@@ -142,7 +143,7 @@ export async function moveStage(id: string, dir: -1 | 1) {
 }
 
 export async function deleteStage(id: string) {
-  await requireUser();
+  await assertPermission("deals.manage");
   const [{ n }] = await db.select({ n: sql<number>`count(*)` }).from(deals).where(eq(deals.stageId, id));
   if (Number(n) > 0) redirect("/deals/settings?error=stage_in_use");
   const [s] = await db.select().from(pipelineStages).where(eq(pipelineStages.id, id)).limit(1);

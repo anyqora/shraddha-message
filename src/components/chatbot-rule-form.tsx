@@ -4,10 +4,11 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 import { IconLoader2, IconPlus, IconX, IconArrowRight } from "@tabler/icons-react";
 import type { BotOption, BotRule } from "@/db/schema";
-import { LIMITS, TRIGGER_META, validateRule, type RuleInput } from "@/app/(app)/chatbot/validate";
+import { LIMITS, TRIGGER_META, hasOptions, validateRule, type ReplyType, type RuleInput, type Validation } from "@/app/(app)/chatbot/validate";
 import { Field, Notice } from "./ui";
 import { WaBubble } from "./wa-bubble";
 import { ChatbotSwitch } from "./chatbot-controls";
+import { ReplyTypePicker, SAMPLE_SLOTS, StepFields } from "./chatbot-step-fields";
 
 type Other = { id: string; name: string; trigger: BotRule["trigger"] };
 type Result = { ok: boolean; message: string } | null;
@@ -37,7 +38,10 @@ export function ChatbotRuleForm({
   const [trigger, setTrigger] = useState<RuleInput["trigger"]>(rule?.trigger ?? "keyword");
   const [keywords, setKeywords] = useState(rule?.keywords ?? "");
   const [matchType, setMatchType] = useState<RuleInput["matchType"]>(rule?.matchType ?? "contains");
-  const [replyType, setReplyType] = useState<RuleInput["replyType"]>(rule?.replyType ?? "text");
+  const [replyType, setReplyType] = useState<ReplyType>(rule?.replyType ?? "text");
+  const [saveTo, setSaveTo] = useState(rule?.saveTo ?? "");
+  const [validation, setValidation] = useState<Validation>(rule?.validation ?? "none");
+  const [nextRuleId, setNextRuleId] = useState<string | null>(rule?.nextRuleId ?? null);
   const [header, setHeader] = useState(rule?.header ?? "");
   const [body, setBody] = useState(rule?.body ?? "");
   const [footer, setFooter] = useState(rule?.footer ?? "");
@@ -48,12 +52,14 @@ export function ChatbotRuleForm({
   const [priority, setPriority] = useState(String(rule?.priority ?? 100));
   const [clientErrors, setClientErrors] = useState<string[]>([]);
 
-  const interactive = replyType !== "text";
+  const interactive = hasOptions(replyType);
+  const isBook = replyType === "book";
   const lim = replyType === "list" ? LIMITS.list : LIMITS.buttons;
   const input: RuleInput = {
     name, trigger, keywords, matchType, replyType, header, body, footer, listButton,
-    options: interactive ? options : [], handoff, active, priority: Number(priority) || 100,
+    options: interactive ? options : [], saveTo, validation, nextRuleId, handoff, active, priority: Number(priority) || 100,
   };
+  const bodyLabel = replyType === "question" ? "Question" : replyType === "lead" ? "Confirmation message (optional)" : isBook ? "Message above the slots" : "Message";
 
   const setOpt = (i: number, patch: Partial<BotOption>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...patch } : o)));
   const kwList = keywords.split(",").map((k) => k.trim()).filter(Boolean);
@@ -111,42 +117,31 @@ export function ChatbotRuleForm({
         )}
 
         <div className="card space-y-3 p-3">
-          <div className="flex items-center gap-3">
-            <span className="label !mb-0">Reply type</span>
-            <div className="flex overflow-hidden rounded-sm border border-line">
-              {(["text", "buttons", "list"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setReplyType(t)}
-                  className={`h-7 px-3 text-sm ${replyType === t ? "bg-accent-soft font-medium text-accent" : "text-ink-2 hover:bg-soft"}`}
-                >
-                  {t === "text" ? "Text" : t === "buttons" ? "Buttons (≤3)" : "List (≤10)"}
-                </button>
-              ))}
-            </div>
+          <div>
+            <span className="label">Reply type</span>
+            <ReplyTypePicker value={replyType} onChange={setReplyType} />
             <input type="hidden" name="replyType" value={replyType} />
           </div>
 
-          {interactive && (
-            <Field label="Header (optional)" hint={<Counter value={header} max={LIMITS.header} />}>
+          {(interactive || isBook) && (
+            <Field label={isBook ? "Service name (shown as the list header and saved on the appointment)" : "Header (optional)"} hint={<Counter value={header} max={LIMITS.header} />}>
               <input name="header" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={LIMITS.header} className="input" />
             </Field>
           )}
           <label className="block">
-            <span className="label">Message</span>
-            <textarea name="body" required rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.body} className="input h-auto py-1.5" />
+            <span className="label">{bodyLabel}</span>
+            <textarea name="body" required={replyType !== "lead"} rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.body} className="input h-auto py-1.5" />
             <span className="mt-1 flex justify-between text-xs text-ink-3">
               <span>*bold* _italic_ ~strike~</span>
               <Counter value={body} max={LIMITS.body} />
             </span>
           </label>
-          {interactive && (
+          {(interactive || isBook) && (
             <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
               <Field label="Footer (optional)" hint={<Counter value={footer} max={LIMITS.footer} />}>
                 <input name="footer" value={footer} onChange={(e) => setFooter(e.target.value)} maxLength={LIMITS.footer} className="input" />
               </Field>
-              {replyType === "list" && (
+              {(replyType === "list" || isBook) && (
                 <Field label="List button" hint={<Counter value={listButton} max={LIMITS.listButton} />}>
                   <input name="listButton" value={listButton} onChange={(e) => setListButton(e.target.value)} maxLength={LIMITS.listButton} className="input" />
                 </Field>
@@ -154,6 +149,21 @@ export function ChatbotRuleForm({
             </div>
           )}
         </div>
+
+        {(replyType === "question" || isBook || replyType === "lead") && (
+          <div className="card p-3">
+            <StepFields
+              replyType={replyType}
+              saveTo={saveTo}
+              setSaveTo={setSaveTo}
+              validation={validation}
+              setValidation={setValidation}
+              nextRuleId={nextRuleId}
+              setNextRuleId={setNextRuleId}
+              others={others}
+            />
+          </div>
+        )}
 
         {interactive && (
           <div className="card space-y-2 p-3">
@@ -231,18 +241,35 @@ export function ChatbotRuleForm({
           {trigger === "keyword" && kwList.length > 0 && (
             <WaBubble body={kwList[0]} />
           )}
-          <WaBubble out
-            header={interactive ? header || undefined : undefined}
-            body={body || "Your message…"}
-            footer={interactive ? footer || undefined : undefined}
-            buttons={
-              replyType === "buttons"
-                ? options.map((o) => o.title || "Button")
-                : replyType === "list"
-                  ? [`☰ ${listButton || "Menu"}`]
-                  : undefined
-            }
-          />
+          {!(replyType === "lead" && !body) && (
+            <WaBubble out
+              header={interactive || isBook ? (isBook ? header || name : header) || undefined : undefined}
+              body={body || "Your message…"}
+              footer={interactive || isBook ? footer || (isBook ? "Times in IST" : "") || undefined : undefined}
+              buttons={
+                replyType === "buttons"
+                  ? options.map((o) => o.title || "Button")
+                  : replyType === "list"
+                    ? [`☰ ${listButton || "Menu"}`]
+                    : isBook
+                      ? [`☰ ${listButton && listButton !== "Menu" ? listButton : "Pick a slot"}`]
+                      : undefined
+              }
+            />
+          )}
+          {replyType === "question" && <WaBubble body="…customer types the answer" />}
+          {replyType === "lead" && <div className="text-center text-[11px] text-[#54656f]">A lead is saved with all collected answers</div>}
+          {isBook && (
+            <div className="ml-auto max-w-[85%] rounded-lg bg-white py-1 text-[13px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]">
+              <div className="px-2.5 py-1 text-xs font-medium text-[#008069]">Next free day</div>
+              {SAMPLE_SLOTS.map((t) => (
+                <div key={t} className="flex items-center justify-between gap-2 border-t border-black/5 px-2.5 py-1.5">
+                  <div className="truncate text-[#111b21]">{t}</div>
+                  <span className="size-3.5 shrink-0 rounded-full border-2 border-[#8696a0]" />
+                </div>
+              ))}
+            </div>
+          )}
           {replyType === "list" && options.length > 0 && (
             <div className="ml-auto max-w-[85%] rounded-lg bg-white py-1 text-[13px] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]">
               <div className="px-2.5 py-1 text-xs font-medium text-[#008069]">{header || "Options"}</div>

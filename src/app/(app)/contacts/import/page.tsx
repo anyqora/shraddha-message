@@ -6,8 +6,10 @@ import { Page } from "@/components/ui";
 import { ImportWizard } from "@/components/import-wizard";
 import { importContacts } from "../actions";
 import { createList } from "../../lists/actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function ImportPage() {
+  await requirePagePermission("contacts.import");
   const all = await db.select().from(lists).orderBy(asc(lists.name));
   return (
     <Page title="Import contacts" icon={<IconUpload />} crumbs={[{ href: "/contacts", label: "Contacts" }]}>

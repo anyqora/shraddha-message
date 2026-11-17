@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { contacts, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
+import { inboxRestricted } from "@/lib/permissions";
 import { Avatar } from "./ui";
 import { formatPhone } from "@/lib/phone";
 import { cn, timeAgo } from "@/lib/utils";
@@ -42,7 +43,9 @@ export async function ConversationList({ activeId, q, filter: rawFilter }: { act
   const searchCond = search
     ? or(like(contacts.name, `%${search}%`), like(contacts.phone, `%${search.replace(/\D/g, "") || search}%`))
     : undefined;
-  const base = and(isNotNull(contacts.lastMessageAt), searchCond);
+  // restricted users only see chats assigned to them or unassigned
+  const scopeCond = (await inboxRestricted(me)) ? or(eq(contacts.assignedTo, me.id), isNull(contacts.assignedTo)) : undefined;
+  const base = and(isNotNull(contacts.lastMessageAt), searchCond, scopeCond);
 
   const [rows, [counts], team, settings] = await Promise.all([
     db

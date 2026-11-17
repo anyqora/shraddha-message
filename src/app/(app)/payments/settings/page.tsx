@@ -5,11 +5,13 @@ import { Page, Field, Notice } from "@/components/ui";
 import { CopyField } from "@/components/settings-copy";
 import { ActionButton } from "@/components/settings-action-button";
 import { savePaymentSettings, testRazorpay } from "../actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 export default async function PaymentSettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  await requirePagePermission("payments.manage");
   const sp = await searchParams;
   const me = await requireUser();
-  const isAdmin = me.role === "admin";
+  const isAdmin = await can(me, "payments.manage");
   const s = await getSettings();
   const base = (process.env.APP_URL || "").replace(/\/+$/, "");
   const webhookUrl = `${base}/api/payments/razorpay`;

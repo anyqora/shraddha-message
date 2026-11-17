@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { Page, Chip, Notice } from "@/components/ui";
 import { SheetsCard } from "./sheets-card";
 import { exportAllContacts, saveSheets, sendTestRow } from "./actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 const LABELS: Record<string, string> = {
   "contact.created": "New contact",
@@ -51,6 +52,7 @@ function doPost(e) {
 `;
 
 export default async function IntegrationsPage() {
+  await requirePagePermission("integrations.manage");
   const user = await requireUser();
   const s = await getSettings();
   const events = s.sheetsEvents.split(",").map((x) => x.trim()).filter(Boolean);
@@ -70,7 +72,7 @@ export default async function IntegrationsPage() {
               </p>
             </div>
           </div>
-          {user.role !== "admin" ? (
+          {!(await can(user, "integrations.manage")) ? (
             <Notice tone="info">Only admins can change the Google Sheets connection.</Notice>
           ) : (
             <SheetsCard

@@ -7,8 +7,10 @@ import { requireUser } from "@/lib/auth";
 import { Page } from "@/components/ui";
 import { ProductForm } from "@/components/product-form";
 import { deleteProductAndBack, saveProduct } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("products.manage");
   await requireUser();
   const { id } = await params;
   const [[p], cats] = await Promise.all([

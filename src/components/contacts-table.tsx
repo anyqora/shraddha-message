@@ -30,7 +30,7 @@ export function ContactsTable({
 }: {
   rows: Row[];
   lists: List[];
-  onDelete: (ids: string[]) => Promise<void>;
+  onDelete?: (ids: string[]) => Promise<void>;
   onAddToList: (ids: string[], listId: string) => Promise<void>;
   onRemoveFromList?: (ids: string[], listId: string) => Promise<void>;
   currentListId?: string;
@@ -77,15 +77,17 @@ export function ContactsTable({
               <IconListCheck size={14} /> Remove from this list
             </button>
           )}
-          <button
-            className="btn btn-danger"
-            disabled={pending}
-            onClick={() => {
-              if (confirm(`Delete ${sel.size} contact(s) and their chat history?`)) run(() => onDelete(ids));
-            }}
-          >
-            <IconTrash size={14} /> Delete
-          </button>
+          {onDelete && (
+            <button
+              className="btn btn-danger"
+              disabled={pending}
+              onClick={() => {
+                if (confirm(`Delete ${sel.size} contact(s) and their chat history?`)) run(() => onDelete(ids));
+              }}
+            >
+              <IconTrash size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
       <table className="table-grid w-full">

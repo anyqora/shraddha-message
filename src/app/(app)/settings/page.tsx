@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { getSettings } from "@/lib/settings";
 import { Notice, Field } from "@/components/ui";
 import { TestConnection } from "@/components/test-connection";
@@ -7,9 +9,11 @@ import { saveWhatsApp, testWhatsApp } from "./actions";
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
   const sp = await searchParams;
   const me = await requireUser();
+  // Settings → WhatsApp is the default landing tab; send users without access to their own account page.
+  if (!(await can(me, "settings.whatsapp"))) redirect("/settings/account");
   const s = await getSettings();
   const appUrl = process.env.APP_URL || "https://your-domain";
-  const isAdmin = me.role === "admin";
+  const isAdmin = true;
 
   return (
     <>

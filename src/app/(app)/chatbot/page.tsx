@@ -18,12 +18,11 @@ import { db } from "@/lib/db";
 import { botRules } from "@/db/schema";
 import { getSettings } from "@/lib/settings";
 import { Page, Empty, Chip, Notice } from "@/components/ui";
-import { BotSettingsForm, RuleActiveToggle, DeleteRuleButton, StarterBotButton } from "@/components/chatbot-controls";
-import { TRIGGER_META } from "./validate";
-import { saveBotSettings, toggleRule, deleteRule, createStarterBot } from "./actions";
+import { BotSettingsForm, RuleActiveToggle, DeleteRuleButton, StarterBotButton, RecipeButton } from "@/components/chatbot-controls";
+import { TRIGGER_META, REPLY_META, usesNext, VALIDATION_META } from "./validate";
+import { saveBotSettings, toggleRule, deleteRule, createStarterBot, createLeadFormRecipe, createBookingRecipe } from "./actions";
 
 const TRIGGER_ORDER = { welcome: 0, keyword: 1, menu: 2, fallback: 3 } as const;
-const REPLY_LABEL = { text: "Text", buttons: "Buttons", list: "List" } as const;
 
 export default async function ChatbotPage() {
   const [settings, rows] = await Promise.all([
@@ -45,6 +44,8 @@ export default async function ChatbotPage() {
       icon={<IconRobot />}
       actions={
         <>
+          <RecipeButton action={createLeadFormRecipe} kind="lead" label="Lead form" />
+          <RecipeButton action={createBookingRecipe} kind="book" label="Booking" />
           <Link href="/chatbot/flow" className="btn"><IconHierarchy2 size={14} /> Flow view</Link>
           <Link href="/chatbot/new" className="btn btn-primary"><IconPlus size={14} /> New rule</Link>
         </>
@@ -70,7 +71,8 @@ export default async function ChatbotPage() {
           <span>3. <Chip color="green">Welcome</Chip> on first message or after 24h quiet</span>
           <IconArrowRight size={12} />
           <span>4. <Chip color="orange">Fallback</Chip></span>
-          <span className="ml-1">· <Chip color="purple">Menu step</Chip> rules are only reached from an option.</span>
+          <span className="ml-1">· <Chip color="purple">Menu step</Chip> rules are only reached from an option or a next step.</span>
+          <span className="ml-1">· While a <b className="text-ink-2">Question</b> waits for an answer (30 min), the typed reply is saved first; “exit” leaves the form.</span>
         </div>
 
         {rows.length ? (
@@ -82,7 +84,7 @@ export default async function ChatbotPage() {
                   {th(<IconBolt />, "Trigger", "w-28")}
                   {th(<IconKey />, "Keywords")}
                   {th(<IconMessage />, "Reply", "w-24")}
-                  {th(<IconList />, "Options", "w-40")}
+                  {th(<IconList />, "Options / next", "w-48")}
                   {th(<IconChartBar />, "Hits", "w-16")}
                   {th(<IconToggleRight />, "Active", "w-16")}
                   <th className="w-16"></th>
@@ -109,9 +111,16 @@ export default async function ChatbotPage() {
                           <span className="text-ink-4">—</span>
                         )}
                       </td>
-                      <td className="text-ink-2">{REPLY_LABEL[r.replyType]}</td>
+                      <td className="text-ink-2">{REPLY_META[r.replyType].short}</td>
                       <td className="truncate text-ink-2" title={links.join(", ")}>
-                        {r.replyType === "text" ? <span className="text-ink-4">—</span> : <>{r.options.length}{links.length > 0 && <span className="ml-1 text-ink-3">→ {links.join(", ")}</span>}</>}
+                        {usesNext(r.replyType) ? (
+                          <>
+                            {r.replyType === "question" && (
+                              <span className="mr-1 text-ink-3">{r.saveTo || "—"}{r.validation !== "none" ? ` · ${VALIDATION_META[r.validation].toLowerCase()}` : ""}</span>
+                            )}
+                            {r.nextRuleId && names.get(r.nextRuleId) ? <span className="text-ink-3">→ {names.get(r.nextRuleId)}</span> : r.replyType !== "question" && <span className="text-ink-4">—</span>}
+                          </>
+                        ) : r.replyType === "text" ? <span className="text-ink-4">—</span> : <>{r.options.length}{links.length > 0 && <span className="ml-1 text-ink-3">→ {links.join(", ")}</span>}</>}
                       </td>
                       <td className="text-ink-2">{r.hits}</td>
                       <td><RuleActiveToggle active={r.active} action={toggleRule.bind(null, r.id)} /></td>

@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { parseRange, reportCsv } from "@/lib/reports";
 import { audit } from "@/lib/audit";
 
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ tab: string }> }) {
   const me = await getCurrentUser();
   if (!me) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await can(me, "reports.view"))) return Response.json({ error: "Not allowed" }, { status: 403 });
   const { tab } = await params;
   const q = new URL(req.url).searchParams;
   const r = parseRange({ from: q.get("from") ?? undefined, to: q.get("to") ?? undefined, range: q.get("range") ?? undefined });

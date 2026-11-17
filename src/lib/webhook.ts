@@ -7,7 +7,7 @@ import { runChatbot } from "./chatbot";
 import { emit } from "./events";
 import { fetchAndStoreWaMedia } from "./media-store";
 
-const OPT_OUT = /^(stop|unsubscribe|stop all|opt ?out|cancel)$/i;
+const OPT_OUT = /^(stop|unsubscribe|stop all|opt ?out)$/i;
 const OPT_IN = /^(start|subscribe|unstop|opt ?in)$/i;
 
 type WaMessage = {

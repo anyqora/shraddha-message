@@ -13,6 +13,8 @@ import { resolveSource, templateShape } from "@/lib/template-utils";
 import { errorMessage, waClient } from "@/lib/whatsapp";
 import { runCampaigns } from "@/lib/campaign-runner";
 import { getSegment, segmentWhere } from "@/lib/segments";
+import { assertPermission } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 
 export type CampaignInput = {
   name: string;
@@ -26,7 +28,7 @@ export type CampaignInput = {
 };
 
 export async function createCampaign(_: unknown, fd: FormData): Promise<{ ok: boolean; message: string }> {
-  const user = await requireUser();
+  const user = await assertPermission("campaigns.send");
   let id = "";
   try {
     const input = JSON.parse(String(fd.get("payload") ?? "{}")) as CampaignInput;
@@ -136,12 +138,13 @@ export async function createCampaign(_: unknown, fd: FormData): Promise<{ ok: bo
   } catch (e) {
     return { ok: false, message: errorMessage(e) };
   }
+  await audit("campaign.create", { entity: "campaigns", entityId: id });
   revalidatePath("/campaigns");
   redirect(`/campaigns/${id}`);
 }
 
 export async function setCampaignStatus(id: string, status: "paused" | "running") {
-  await requireUser();
+  await assertPermission("campaigns.send");
   const [c] = await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
   if (!c) return;
   if (status === "paused" && (c.status === "running" || c.status === "scheduled")) {
@@ -155,7 +158,7 @@ export async function setCampaignStatus(id: string, status: "paused" | "running"
 }
 
 export async function retryFailed(id: string) {
-  await requireUser();
+  await assertPermission("campaigns.send");
   await db
     .update(campaignRecipients)
     .set({ status: "pending", error: "", wamid: null })
@@ -166,7 +169,8 @@ export async function retryFailed(id: string) {
 }
 
 export async function deleteCampaign(id: string) {
-  await requireUser();
+  await assertPermission("campaigns.send");
+  await audit("campaign.delete", { entity: "campaigns", entityId: id });
   await db.delete(campaignRecipients).where(eq(campaignRecipients.campaignId, id));
   await db.delete(campaigns).where(eq(campaigns.id, id));
   revalidatePath("/campaigns");

@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/auth";
 import { enrollContacts, stopEnrollments } from "@/lib/drips";
 import { templateShape } from "@/lib/template-utils";
 import { validateSteps } from "./shared";
+import { assertPermission } from "@/lib/permissions";
 
 type Result = { ok: boolean; message: string; id?: string };
 
@@ -33,7 +34,7 @@ function cleanSteps(raw: unknown): DripStep[] {
 
 /** Create (id = null) or update a sequence from the builder's JSON payload. */
 export async function saveSequence(id: string | null, payload: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("drips.manage");
   let p: any;
   try {
     p = JSON.parse(payload);
@@ -65,21 +66,21 @@ export async function saveSequence(id: string | null, payload: string): Promise<
 }
 
 export async function toggleSequence(id: string, active: boolean) {
-  await requireUser();
+  await assertPermission("drips.manage");
   await db.update(dripSequences).set({ active }).where(eq(dripSequences.id, id));
   revalidatePath("/drips");
   revalidatePath(`/drips/${id}`);
 }
 
 export async function deleteSequence(id: string) {
-  await requireUser();
+  await assertPermission("drips.manage");
   await db.delete(dripEnrollments).where(eq(dripEnrollments.sequenceId, id));
   await db.delete(dripSequences).where(eq(dripSequences.id, id));
   revalidatePath("/drips");
 }
 
 export async function enrollList(sequenceId: string, listId: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("drips.manage");
   if (!listId) return { ok: false, message: "Choose a list." };
   const members = await db.select({ id: listMembers.contactId }).from(listMembers).where(eq(listMembers.listId, listId));
   const n = await enrollContacts(sequenceId, members.map((m) => m.id));
@@ -89,7 +90,7 @@ export async function enrollList(sequenceId: string, listId: string): Promise<Re
 }
 
 export async function enrollSelected(sequenceId: string, contactIds: string[]): Promise<Result> {
-  await requireUser();
+  await assertPermission("drips.manage");
   const n = await enrollContacts(sequenceId, contactIds.slice(0, 1000));
   revalidatePath(`/drips/${sequenceId}`);
   revalidatePath("/drips");
@@ -111,14 +112,14 @@ export async function searchContactsForDrip(q: string) {
 }
 
 export async function stopEnrollment(sequenceId: string, ids: string[]) {
-  await requireUser();
+  await assertPermission("drips.manage");
   await stopEnrollments(ids);
   revalidatePath(`/drips/${sequenceId}`);
   revalidatePath("/drips");
 }
 
 export async function removeEnrollment(sequenceId: string, ids: string[]) {
-  await requireUser();
+  await assertPermission("drips.manage");
   if (!ids.length) return;
   await db.delete(dripEnrollments).where(and(eq(dripEnrollments.sequenceId, sequenceId), inArray(dripEnrollments.id, ids)));
   revalidatePath(`/drips/${sequenceId}`);
@@ -126,7 +127,7 @@ export async function removeEnrollment(sequenceId: string, ids: string[]) {
 }
 
 export async function saveWish(kind: "birthday" | "anniversary", payload: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("drips.manage");
   if (kind !== "birthday" && kind !== "anniversary") return { ok: false, message: "Unknown wish." };
   let p: any;
   try {

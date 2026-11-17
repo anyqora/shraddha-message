@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { users } from "@/db/schema";
 import { createSession, getCurrentUser } from "@/lib/auth";
 import { verifyPassword } from "@/lib/password";
+import { audit } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,12 @@ async function login(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
   const [u] = await db.select().from(users).where(eq(sql`lower(${users.email})`, email)).limit(1);
-  if (!u || !(await verifyPassword(password, u.passwordHash))) redirect("/login?error=1");
+  if (!u || !(await verifyPassword(password, u.passwordHash))) {
+    await audit("auth.login_failed", { userId: null, entity: "users", summary: email });
+    redirect("/login?error=1");
+  }
   await createSession(u.id);
+  await audit("auth.login", { userId: u.id, entity: "users", entityId: u.id });
   redirect("/");
 }
 

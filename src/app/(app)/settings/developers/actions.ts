@@ -10,11 +10,12 @@ import { randomToken } from "@/lib/crypto";
 import { generateApiKey } from "@/lib/api-auth";
 import { deliver } from "@/lib/outgoing-webhooks";
 import { EVENT_NAMES } from "@/lib/events";
+import { assertPermission } from "@/lib/permissions";
 
 const PATH = "/settings/developers";
 
 export async function createApiKey(fd: FormData): Promise<{ ok: boolean; message: string; key?: string }> {
-  const me = await requireAdmin();
+  const me = await assertPermission("settings.developers");
   const name = String(fd.get("name") ?? "").trim().slice(0, 191);
   if (!name) return { ok: false, message: "Give the key a name." };
   const k = generateApiKey();
@@ -24,7 +25,7 @@ export async function createApiKey(fd: FormData): Promise<{ ok: boolean; message
 }
 
 export async function revokeApiKey(id: string) {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   await db.delete(apiKeys).where(eq(apiKeys.id, id));
   revalidatePath(PATH);
 }
@@ -42,7 +43,7 @@ function parseEndpoint(fd: FormData): { url: string; events: string[]; active: b
 }
 
 export async function createWebhook(fd: FormData) {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   const p = parseEndpoint(fd);
   if (!p) redirect(`${PATH}?error=url`);
   if (!p.events.length) redirect(`${PATH}?error=events`);
@@ -52,7 +53,7 @@ export async function createWebhook(fd: FormData) {
 }
 
 export async function updateWebhook(id: string, fd: FormData) {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   const p = parseEndpoint(fd);
   if (!p) redirect(`${PATH}?error=url`);
   if (!p.events.length) redirect(`${PATH}?error=events`);
@@ -62,19 +63,19 @@ export async function updateWebhook(id: string, fd: FormData) {
 }
 
 export async function rotateWebhookSecret(id: string) {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   await db.update(webhookEndpoints).set({ secret: "whsec_" + randomToken(24) }).where(eq(webhookEndpoints.id, id));
   revalidatePath(PATH);
 }
 
 export async function deleteWebhook(id: string) {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   await db.delete(webhookEndpoints).where(eq(webhookEndpoints.id, id));
   revalidatePath(PATH);
 }
 
 export async function testWebhook(id: string): Promise<{ ok: boolean; message: string }> {
-  await requireAdmin();
+  await assertPermission("settings.developers");
   const [ep] = await db.select().from(webhookEndpoints).where(eq(webhookEndpoints.id, id)).limit(1);
   if (!ep) return { ok: false, message: "Endpoint not found." };
   const r = await deliver(ep, "test", { message: "This is a test event from Shraddha Message." });

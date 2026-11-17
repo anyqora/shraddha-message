@@ -10,6 +10,8 @@ import { normalizePhone } from "@/lib/phone";
 import { getSettings } from "@/lib/settings";
 import { emit } from "@/lib/events";
 import { toMonthDay } from "@/app/(app)/drips/shared";
+import { assertPermission } from "@/lib/permissions";
+import { audit } from "@/lib/audit";
 
 export type ImportRow = { phone: string; name?: string; email?: string; custom?: Record<string, string>; birthday?: string; anniversary?: string };
 
@@ -76,13 +78,15 @@ export async function saveContact(formData: FormData) {
 
 export async function setOptOut(id: string, optedOut: boolean) {
   await requireUser();
+  await audit(optedOut ? "contact.opt_out" : "contact.opt_in", { entity: "contacts", entityId: id });
   await db.update(contacts).set({ optedOut, optedOutAt: optedOut ? new Date() : null }).where(eq(contacts.id, id));
   revalidatePath(`/contacts/${id}`);
   revalidatePath("/contacts");
 }
 
 export async function deleteContacts(ids: string[]) {
-  await requireUser();
+  await assertPermission("contacts.delete");
+  await audit("contact.delete", { entity: "contacts", summary: `${ids.length} contact(s)` });
   if (!ids.length) return;
   await db.delete(listMembers).where(inArray(listMembers.contactId, ids));
   await db.delete(messages).where(inArray(messages.contactId, ids));
@@ -109,7 +113,8 @@ export async function removeFromList(ids: string[], listId: string) {
 
 /** Upserts contacts by phone. Returns counts + ids (in input order, "" for invalid rows). */
 export async function importContacts(rows: ImportRow[], listId?: string, overwrite = true) {
-  await requireUser();
+  await assertPermission("contacts.import");
+  await audit("contact.import", { entity: "contacts", summary: `${rows.length} row(s)` });
   const { defaultCountryCode } = await getSettings();
   let invalid = 0;
   const clean = new Map<string, ImportRow>();

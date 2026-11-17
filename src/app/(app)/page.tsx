@@ -17,6 +17,7 @@ import { Page, StatusChip, Notice, Avatar } from "@/components/ui";
 import { ActivityChart, type DayPoint } from "@/components/activity-chart";
 import { getSettings } from "@/lib/settings";
 import { requireUser } from "@/lib/auth";
+import { getPermissions } from "@/lib/permissions";
 import { campaignStats, summarize } from "@/lib/campaign-runner";
 import { formatDateTime, timeAgo } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
@@ -76,8 +77,10 @@ function Funnel({ sent, delivered, read, failed }: { sent: number; delivered: nu
   );
 }
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
+  const { denied } = await searchParams;
   const user = await requireUser();
+  const perms = await getPermissions(user.role);
   const now = Date.now();
   const d7 = new Date(now - 7 * 864e5);
   const d14 = new Date(now - 14 * 864e5);
@@ -164,11 +167,13 @@ export default async function Dashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link href="/campaigns/new" className="btn btn-primary"><IconSpeakerphone size={14} /> New campaign</Link>
-            <Link href="/contacts/import" className="btn"><IconUpload size={14} /> Import contacts</Link>
-            <Link href="/templates/new" className="btn"><IconTemplate size={14} /> New template</Link>
+            {perms.includes("campaigns.send") && <Link href="/campaigns/new" className="btn btn-primary"><IconSpeakerphone size={14} /> New campaign</Link>}
+            {perms.includes("contacts.import") && <Link href="/contacts/import" className="btn"><IconUpload size={14} /> Import contacts</Link>}
+            {perms.includes("templates.manage") && <Link href="/templates/new" className="btn"><IconTemplate size={14} /> New template</Link>}
           </div>
         </div>
+
+        {denied && <Notice tone="warn">You don&apos;t have access to that page. Ask an admin if you need it.</Notice>}
 
         <SetupChecklist steps={x.setup} />
 

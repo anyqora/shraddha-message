@@ -9,8 +9,10 @@ import { appBaseUrl, linkShortUrl, waMeUrl } from "@/lib/link-tags";
 import { Page, Chip, Notice } from "@/components/ui";
 import { LinkForm } from "@/components/link-form";
 import { createLink } from "./actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function LinksPage() {
+  await requirePagePermission("links.manage");
   const [rows, allLists, settings] = await Promise.all([
     db.select().from(waLinks).orderBy(desc(waLinks.createdAt)),
     db.select({ id: lists.id, name: lists.name, color: lists.color }).from(lists).orderBy(asc(lists.name)),

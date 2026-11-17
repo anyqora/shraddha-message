@@ -6,6 +6,7 @@ import { auditLog, users } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { formatDateTime } from "@/lib/utils";
 import { Avatar, Chip, Empty, Page } from "@/components/ui";
+import { requirePagePermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,14 +27,8 @@ function actionColor(a: string) {
 type SP = { user?: string; action?: string; entity?: string; from?: string; to?: string; page?: string };
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<SP> }) {
+  await requirePagePermission("audit.view");
   const me = await requireUser();
-  if (me.role !== "admin") {
-    return (
-      <Page title="Audit log" icon={<IconHistory />}>
-        <Empty icon={<IconLock />} title="Admins only" hint="Only workspace admins can view the audit log." />
-      </Page>
-    );
-  }
   const sp = await searchParams;
   const page = Math.max(1, Math.floor(Number(sp.page) || 1));
   const conds: SQL[] = [];

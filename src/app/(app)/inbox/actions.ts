@@ -13,6 +13,8 @@ import { buildSendComponents, renderTemplatePreview } from "@/lib/template-utils
 import { pauseBot } from "@/lib/chatbot";
 import { getSettings } from "@/lib/settings";
 import { emit } from "@/lib/events";
+import { inboxRestricted } from "@/lib/permissions";
+import type { User } from "@/db/schema";
 
 const fileKind = (mime: string) =>
   mime.startsWith("image/") ? "image" : mime.startsWith("video/") ? "video" : mime.startsWith("audio/") ? "audio" : "document";
@@ -42,9 +44,10 @@ async function sendWebChat(contactId: string, text: string, file: File | null, u
 
 type Result = { ok: boolean; message: string };
 
-async function contactOf(id: string) {
+async function contactOf(id: string, user?: User) {
   const [c] = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
   if (!c) throw new Error("Contact not found");
+  if (user && c.assignedTo && c.assignedTo !== user.id && (await inboxRestricted(user))) throw new Error("This chat is assigned to someone else.");
   return c;
 }
 
@@ -54,7 +57,7 @@ export async function sendChatMessage(contactId: string, _: unknown, fd: FormDat
   const file = fd.get("file");
   const hasFile = file instanceof File && file.size > 0;
   if (!text && !hasFile) return { ok: false, message: "" };
-  const c = await contactOf(contactId);
+  const c = await contactOf(contactId, user);
   if (c.channel === "web") return sendWebChat(contactId, text, hasFile ? (file as File) : null, user.id);
   let wa;
   try {
@@ -86,7 +89,7 @@ export async function sendChatMessage(contactId: string, _: unknown, fd: FormDat
 }
 
 export async function toggleBot(contactId: string, paused: boolean) {
-  await requireUser();
+  await contactOf(contactId, await requireUser());
   if (paused) await pauseBot(contactId, (await getSettings()).botPauseHours);
   else await db.update(contacts).set({ botPausedUntil: null }).where(eq(contacts.id, contactId));
   revalidatePath(`/inbox/${contactId}`);
@@ -94,7 +97,7 @@ export async function toggleBot(contactId: string, paused: boolean) {
 
 export async function sendChatTemplate(contactId: string, templateId: string, params: { header: string[]; body: string[] }): Promise<Result> {
   const user = await requireUser();
-  const c = await contactOf(contactId);
+  const c = await contactOf(contactId, user);
   const [t] = await db.select().from(templates).where(eq(templates.id, templateId)).limit(1);
   if (!t) return { ok: false, message: "Template not found" };
   const body = renderTemplatePreview(t.components, params);
@@ -119,6 +122,7 @@ export async function sendChatTemplate(contactId: string, templateId: string, pa
 
 export async function assignChat(contactId: string, userId: string | null) {
   const me = await requireUser();
+  await contactOf(contactId, me);
   if (userId) {
     const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
     if (!u) throw new Error("User not found");
@@ -131,6 +135,7 @@ export async function assignChat(contactId: string, userId: string | null) {
 
 export async function assignChatToMe(contactId: string) {
   const user = await requireUser();
+  await contactOf(contactId, user);
   await db.update(contacts).set({ assignedTo: user.id }).where(eq(contacts.id, contactId));
   await emit({ name: "chat.assigned", contactId, userId: user.id, byUserId: user.id });
   revalidatePath("/inbox");
@@ -138,7 +143,7 @@ export async function assignChatToMe(contactId: string) {
 }
 
 export async function setChatStatus(contactId: string, status: "open" | "closed") {
-  await requireUser();
+  await contactOf(contactId, await requireUser());
   if (status !== "open" && status !== "closed") throw new Error("Invalid status");
   await db.update(contacts).set({ chatStatus: status }).where(eq(contacts.id, contactId));
   revalidatePath("/inbox");

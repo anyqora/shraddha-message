@@ -1,4 +1,5 @@
 import { getCurrentUser } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { audit } from "@/lib/audit";
 import { backupTables, readRows, streamFrom, EXCLUDED_TABLES, SECRET_SETTING_KEYS, REDACTED_COLUMNS } from "../tables";
 
@@ -8,7 +9,7 @@ export const maxDuration = 300;
 export async function GET() {
   const me = await getCurrentUser();
   if (!me) return Response.json({ error: "Unauthorized" }, { status: 401 });
-  if (me.role !== "admin") return Response.json({ error: "Admins only" }, { status: 403 });
+  if (!(await can(me, "backup.download"))) return Response.json({ error: "Not allowed" }, { status: 403 });
 
   const tables = backupTables();
   const stamp = new Date().toISOString();

@@ -3,9 +3,10 @@
 import { useActionState, useEffect, useState } from "react";
 import { IconLoader2, IconPlus, IconX, IconArrowRight, IconTrash, IconCheck } from "@tabler/icons-react";
 import type { BotOption, BotRule } from "@/db/schema";
-import { LIMITS, TRIGGER_META, validateRule, type RuleInput } from "@/app/(app)/chatbot/validate";
+import { LIMITS, TRIGGER_META, hasOptions, validateRule, type ReplyType, type RuleInput, type Validation } from "@/app/(app)/chatbot/validate";
 import { Field, Notice } from "./ui";
 import { ChatbotSwitch } from "./chatbot-controls";
+import { ReplyTypePicker, StepFields } from "./chatbot-step-fields";
 
 type Result = { ok: boolean; message: string; rule?: BotRule } | null;
 type Other = { id: string; name: string; trigger: BotRule["trigger"] };
@@ -40,7 +41,10 @@ export function FlowRuleEditor({
   const [trigger, setTrigger] = useState<RuleInput["trigger"]>(rule.trigger);
   const [keywords, setKeywords] = useState(rule.keywords);
   const [matchType, setMatchType] = useState<RuleInput["matchType"]>(rule.matchType);
-  const [replyType, setReplyType] = useState<RuleInput["replyType"]>(rule.replyType);
+  const [replyType, setReplyType] = useState<ReplyType>(rule.replyType);
+  const [saveTo, setSaveTo] = useState(rule.saveTo);
+  const [validation, setValidation] = useState<Validation>(rule.validation);
+  const [nextRuleId, setNextRuleId] = useState<string | null>(rule.nextRuleId ?? null);
   const [header, setHeader] = useState(rule.header);
   const [body, setBody] = useState(rule.body);
   const [footer, setFooter] = useState(rule.footer);
@@ -58,17 +62,24 @@ export function FlowRuleEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ruleOptionsKey]);
 
+  // …and the "next step" link
+  useEffect(() => {
+    setNextRuleId(rule.nextRuleId ?? null);
+  }, [rule.nextRuleId]);
+
   useEffect(() => {
     if (state?.ok && state.rule) onSaved(state.rule);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
-  const interactive = replyType !== "text";
+  const interactive = hasOptions(replyType);
+  const isBook = replyType === "book";
   const lim = replyType === "list" ? LIMITS.list : LIMITS.buttons;
   const input: RuleInput = {
     name, trigger, keywords, matchType, replyType, header, body, footer, listButton,
-    options: interactive ? options : [], handoff, active, priority: Number(priority) || 100,
+    options: interactive ? options : [], saveTo, validation, nextRuleId, handoff, active, priority: Number(priority) || 100,
   };
+  const bodyLabel = replyType === "question" ? "Question" : replyType === "lead" ? "Confirmation message (optional)" : isBook ? "Message above the slots" : "Message";
   const setOpt = (i: number, patch: Partial<BotOption>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...patch } : o)));
 
   return (
@@ -124,42 +135,47 @@ export function FlowRuleEditor({
       )}
 
       <div className="space-y-2.5 rounded-md border border-line p-2.5">
-        <div className="flex overflow-hidden rounded-sm border border-line">
-          {(["text", "buttons", "list"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setReplyType(t)}
-              className={`h-7 flex-1 text-sm ${replyType === t ? "bg-accent-soft font-medium text-accent" : "text-ink-2 hover:bg-soft"}`}
-            >
-              {t === "text" ? "Text" : t === "buttons" ? "Buttons ≤3" : "List ≤10"}
-            </button>
-          ))}
-        </div>
-        {interactive && (
-          <Field label="Header (optional)" hint={<Counter value={header} max={LIMITS.header} />}>
+        <ReplyTypePicker value={replyType} onChange={setReplyType} compact />
+        {(interactive || isBook) && (
+          <Field label={isBook ? "Service name" : "Header (optional)"} hint={<Counter value={header} max={LIMITS.header} />}>
             <input name="header" value={header} onChange={(e) => setHeader(e.target.value)} maxLength={LIMITS.header} className="input" />
           </Field>
         )}
         <label className="block">
-          <span className="label">Message</span>
-          <textarea name="body" required rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.body} className="input h-auto py-1.5" />
+          <span className="label">{bodyLabel}</span>
+          <textarea name="body" required={replyType !== "lead"} rows={5} value={body} onChange={(e) => setBody(e.target.value)} maxLength={LIMITS.body} className="input h-auto py-1.5" />
           <span className="mt-1 flex justify-between text-xs text-ink-3">
             <span>*bold* _italic_ ~strike~</span>
             <Counter value={body} max={LIMITS.body} />
           </span>
         </label>
-        {interactive && (
+        {(interactive || isBook) && (
           <Field label="Footer (optional)" hint={<Counter value={footer} max={LIMITS.footer} />}>
             <input name="footer" value={footer} onChange={(e) => setFooter(e.target.value)} maxLength={LIMITS.footer} className="input" />
           </Field>
         )}
-        {replyType === "list" && (
+        {(replyType === "list" || isBook) && (
           <Field label="List button" hint={<Counter value={listButton} max={LIMITS.listButton} />}>
             <input name="listButton" value={listButton} onChange={(e) => setListButton(e.target.value)} maxLength={LIMITS.listButton} className="input" />
           </Field>
         )}
       </div>
+
+      {(replyType === "question" || isBook || replyType === "lead") && (
+        <div className="rounded-md border border-line p-2.5">
+          <StepFields
+            replyType={replyType}
+            saveTo={saveTo}
+            setSaveTo={setSaveTo}
+            validation={validation}
+            setValidation={setValidation}
+            nextRuleId={nextRuleId}
+            setNextRuleId={setNextRuleId}
+            others={others}
+          />
+          <p className="mt-1.5 text-xs text-ink-3">Tip: drag from the step’s “Next” dot on the canvas to link it.</p>
+        </div>
+      )}
 
       {interactive && (
         <div className="space-y-2 rounded-md border border-line p-2.5">

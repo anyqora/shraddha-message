@@ -10,12 +10,14 @@ import { formatMoney, PAYMENT_STATUS_COLOR } from "@/components/payment-money";
 import { formatPhone } from "@/lib/phone";
 import { cn, formatDateTime } from "@/lib/utils";
 import { cancelPayment, markPaymentPaid, refreshOpenPayments, refreshPaymentStatus } from "./actions";
+import { can, requirePagePermission } from "@/lib/permissions";
 
 const STATUSES = ["created", "paid", "expired", "cancelled", "failed"] as const;
 type Status = (typeof STATUSES)[number];
 const LABEL: Record<string, string> = { created: "Pending", paid: "Paid", expired: "Expired", cancelled: "Cancelled", failed: "Failed" };
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<{ status?: string; created?: string }> }) {
+  await requirePagePermission("payments.manage");
   const me = await requireUser();
   const sp = await searchParams;
   const status = (STATUSES as readonly string[]).includes(sp.status ?? "") ? (sp.status as Status) : "";
@@ -45,7 +47,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       actions={
         <>
           <RefreshAllButton action={refreshOpenPayments} />
-          {me.role === "admin" && <Link href="/payments/settings" className="btn"><IconSettings size={14} /> Settings</Link>}
+          {(await can(me, "payments.manage")) && <Link href="/payments/settings" className="btn"><IconSettings size={14} /> Settings</Link>}
           <Link href="/payments/new" className="btn btn-primary"><IconPlus size={14} /> New payment link</Link>
         </>
       }

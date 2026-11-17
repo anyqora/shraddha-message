@@ -11,6 +11,7 @@ import { ActionButton } from "@/components/settings-action-button";
 import { CopyField } from "@/components/settings-copy";
 import { timeAgo, formatDateTime } from "@/lib/utils";
 import { createApiKey, createWebhook, deleteWebhook, revokeApiKey, rotateWebhookSecret, testWebhook, updateWebhook } from "./actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 const ERR: Record<string, string> = {
   url: "Enter a valid http(s) URL.",
@@ -35,9 +36,9 @@ function Code({ children }: { children: string }) {
 }
 
 export default async function DevelopersSettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+  await requirePagePermission("settings.developers");
   const sp = await searchParams;
   const me = await requireUser();
-  if (me.role !== "admin") return <Notice tone="warn">Only admins can manage API keys and webhooks.</Notice>;
 
   const [keys, hooks] = await Promise.all([
     db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt)),

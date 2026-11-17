@@ -33,8 +33,11 @@ import {
   IconChartBar,
   IconHistory,
   IconDatabaseExport,
+  IconAddressBook,
+  IconCalendarEvent,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { canAccessRoute, ROLE_LABELS, type Role } from "@/lib/permission-keys";
 import { Avatar } from "./ui";
 import { CommandMenu, useCommandMenu } from "./command-menu";
 import { NotificationBell } from "./notification-bell";
@@ -56,7 +59,9 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/companies", label: "Companies", icon: IconBuilding, tint: "#0c8599" },
       { href: "/deals", label: "Deals", icon: IconTargetArrow, tint: "#2f9e44" },
+      { href: "/leads", label: "Leads", icon: IconAddressBook, tint: "#e8590c" },
       { href: "/tasks", label: "Tasks", icon: IconChecklist, tint: "#1961ed" },
+      { href: "/appointments", label: "Appointments", icon: IconCalendarEvent, tint: "#7048e8" },
       { href: "/products", label: "Products", icon: IconShoppingBag, tint: "#d6336c" },
       { href: "/payments", label: "Payments", icon: IconCreditCard, tint: "#2f9e44" },
     ],
@@ -88,12 +93,14 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
 export function Sidebar({
   appName,
   user,
+  permissions,
   unread,
   connected,
   logout,
 }: {
   appName: string;
   user: { name: string; email: string; role: string };
+  permissions: string[];
   unread: number;
   connected: boolean;
   logout: () => Promise<void>;
@@ -117,6 +124,7 @@ export function Sidebar({
     setClosedGroups(n);
     try { localStorage.setItem("sm.groups", JSON.stringify(n)); } catch {}
   };
+  const groups = GROUPS.map((g) => ({ ...g, items: g.items.filter((n) => canAccessRoute(permissions, n.href)) })).filter((g) => g.items.length);
   const active = (href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
 
   const link = (n: { href: string; label: string; icon: typeof IconUser; tint?: string }, extra?: React.ReactNode) => {
@@ -153,7 +161,7 @@ export function Sidebar({
         </button>
         <NotificationBell collapsed />
         <nav className="flex w-full flex-col gap-1 px-2">
-          {GROUPS.flatMap((g) => g.items).map((n) => link(n))}
+          {groups.flatMap((g) => g.items).map((n) => link(n))}
           {link({ href: "/settings", label: "Settings", icon: IconSettings, tint: "#999" })}
         </nav>
         <CommandMenu open={open} onClose={() => setOpen(false)} />
@@ -188,7 +196,7 @@ export function Sidebar({
         )}
       </div>
 
-      {GROUPS.map((g) => {
+      {groups.map((g) => {
         const closed = closedGroups.includes(g.title);
         return (
           <div key={g.title}>
@@ -216,7 +224,7 @@ export function Sidebar({
         <Avatar name={user.name || user.email} size={22} />
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate text-sm font-medium text-ink">{user.name || user.email}</div>
-          <div className="truncate text-xs text-ink-3">{user.role === "admin" ? "Admin" : "Agent"}</div>
+          <div className="truncate text-xs text-ink-3">{ROLE_LABELS[user.role as Role] ?? user.role}</div>
         </div>
         <form action={logout}>
           <button className="rounded-sm p-1 text-ink-3 hover:bg-black/[0.06] hover:text-ink" title="Log out">

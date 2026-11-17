@@ -8,6 +8,7 @@ import { requireAdmin } from "@/lib/auth";
 import { getSettings, saveSettings } from "@/lib/settings";
 import { EVENT_NAMES } from "@/lib/events";
 import { contactRow, postToSheet } from "@/lib/sheets-sync";
+import { assertPermission } from "@/lib/permissions";
 
 type Result = { ok: boolean; message: string };
 
@@ -21,7 +22,7 @@ function validUrl(u: string) {
 }
 
 export async function saveSheets(_: unknown, fd: FormData): Promise<Result> {
-  await requireAdmin();
+  await assertPermission("integrations.manage");
   const url = String(fd.get("url") ?? "").trim();
   if (url && !validUrl(url)) return { ok: false, message: "Enter the https:// Web App URL from Apps Script (Deploy → Manage deployments)." };
   const events = fd.getAll("events").map(String).filter((e) => (EVENT_NAMES as string[]).includes(e));
@@ -31,7 +32,7 @@ export async function saveSheets(_: unknown, fd: FormData): Promise<Result> {
 }
 
 export async function sendTestRow(): Promise<Result> {
-  await requireAdmin();
+  await assertPermission("integrations.manage");
   const s = await getSettings();
   if (!s.sheetsWebhookUrl) return { ok: false, message: "Save the Web App URL first." };
   const r = await postToSheet(s.sheetsWebhookUrl, {
@@ -42,7 +43,8 @@ export async function sendTestRow(): Promise<Result> {
 }
 
 export async function exportAllContacts(): Promise<Result> {
-  await requireAdmin();
+  await assertPermission("integrations.manage");
+  await assertPermission("contacts.export");
   const s = await getSettings();
   if (!s.sheetsWebhookUrl) return { ok: false, message: "Save the Web App URL first." };
   const BATCH = 500;

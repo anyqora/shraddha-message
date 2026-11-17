@@ -8,11 +8,12 @@ import { automationRuns, automations, lists, templates, users, type AutomationSt
 import { requireUser } from "@/lib/auth";
 import { templateShape } from "@/lib/template-utils";
 import { normalizeAutomation, validateAutomation } from "./validate";
+import { assertPermission } from "@/lib/permissions";
 
 type Result = { ok: boolean; message: string };
 
 export async function saveAutomation(id: string | null, payload: string): Promise<Result> {
-  await requireUser();
+  await assertPermission("automations.manage");
   let raw: unknown;
   try {
     raw = JSON.parse(payload);
@@ -63,13 +64,13 @@ export async function saveAutomation(id: string | null, payload: string): Promis
 }
 
 export async function toggleAutomation(id: string, active: boolean) {
-  await requireUser();
+  await assertPermission("automations.manage");
   await db.update(automations).set({ active }).where(eq(automations.id, id));
   revalidatePath("/automations");
 }
 
 export async function deleteAutomation(id: string) {
-  await requireUser();
+  await assertPermission("automations.manage");
   await db.delete(automationRuns).where(eq(automationRuns.automationId, id));
   await db.delete(automations).where(eq(automations.id, id));
   revalidatePath("/automations");
@@ -86,7 +87,7 @@ async function listByName(name: string, color: string): Promise<string> {
 }
 
 export async function createRecipe(key: RecipeKey): Promise<void> {
-  await requireUser();
+  await assertPermission("automations.manage");
   let name: string;
   let trigger: AutomationTrigger;
   let steps: AutomationStep[];

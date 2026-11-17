@@ -12,6 +12,7 @@ import { recordOutbound } from "@/lib/messaging";
 import { pauseBot } from "@/lib/chatbot";
 import { getSettings } from "@/lib/settings";
 import { formatMoney, rupeesToPaise } from "@/components/payment-money";
+import { assertPermission } from "@/lib/permissions";
 
 type Result = { ok: boolean; message: string };
 
@@ -28,7 +29,7 @@ async function saveImage(file: File): Promise<string | Result> {
 }
 
 export async function saveProduct(id: string | null, _: unknown, fd: FormData): Promise<Result> {
-  await requireUser();
+  await assertPermission("products.manage");
   const name = str(fd, "name", 191);
   if (!name) return { ok: false, message: "Name is required." };
   const priceRaw = str(fd, "price", 20);
@@ -69,7 +70,7 @@ export async function saveProduct(id: string | null, _: unknown, fd: FormData): 
 }
 
 export async function deleteProduct(id: string) {
-  await requireUser();
+  await assertPermission("products.manage");
   // the image row is kept: chat messages that showed this product still reference it
   await db.delete(products).where(eq(products.id, id));
   revalidatePath("/products");
@@ -81,7 +82,7 @@ export async function deleteProductAndBack(id: string) {
 }
 
 export async function setProductActive(id: string, active: boolean) {
-  await requireUser();
+  await assertPermission("products.manage");
   await db.update(products).set({ active }).where(eq(products.id, id));
   revalidatePath("/products");
 }
@@ -122,7 +123,7 @@ function parseCsv(text: string): string[][] {
 }
 
 export async function importProducts(_: unknown, fd: FormData): Promise<Result> {
-  await requireUser();
+  await assertPermission("products.manage");
   const file = fd.get("file");
   if (!(file instanceof File) || !file.size) return { ok: false, message: "Choose a CSV file." };
   const rows = parseCsv((await file.text()).replace(/^﻿/, ""));

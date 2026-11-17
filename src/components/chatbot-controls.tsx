@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { IconLoader2, IconSparkles, IconTrash } from "@tabler/icons-react";
+import { IconCalendarPlus, IconForms, IconLoader2, IconSparkles, IconTrash } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Notice } from "./ui";
 
@@ -101,6 +101,30 @@ export function StarterBotButton({ action }: { action: () => Promise<void> }) {
   return (
     <button type="button" className="btn btn-primary" disabled={pending} onClick={() => start(() => action())}>
       {pending ? <IconLoader2 size={14} className="animate-spin" /> : <IconSparkles size={14} />} Create starter bot
+    </button>
+  );
+}
+
+/** Adds a ready-made group of steps (lead form / booking) to the bot. */
+export function RecipeButton({ action, label, kind }: { action: () => Promise<void>; label: string; kind: "lead" | "book" }) {
+  const [pending, start] = useTransition();
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="btn"
+      disabled={pending}
+      title={kind === "lead" ? "Adds: ask name → requirement → city → save lead" : "Adds: ask name → offer appointment slots"}
+      onClick={() => {
+        if (!confirm(`Add the “${label}” recipe? It creates new steps you can edit afterwards.`)) return;
+        start(async () => {
+          await action();
+          setDone(true);
+        });
+      }}
+    >
+      {pending ? <IconLoader2 size={14} className="animate-spin" /> : kind === "lead" ? <IconForms size={14} /> : <IconCalendarPlus size={14} />}
+      {done ? `${label} added` : `+ ${label}`}
     </button>
   );
 }

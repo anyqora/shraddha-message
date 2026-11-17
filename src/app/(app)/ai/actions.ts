@@ -9,11 +9,12 @@ import { aiKnowledge } from "@/db/schema";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { saveSettings, type AppSettings } from "@/lib/settings";
 import { testAi, type AiUsageInfo } from "@/lib/ai";
+import { assertPermission } from "@/lib/permissions";
 
 const str = (fd: FormData, k: string) => String(fd.get(k) ?? "").trim();
 
 export async function saveAiSettings(fd: FormData) {
-  await requireAdmin();
+  await assertPermission("ai.manage");
   const preset = str(fd, "aiProvider");
   const baseUrl =
     preset === "openai" ? "https://api.openai.com/v1" : preset === "openrouter" ? "https://openrouter.ai/api/v1" : str(fd, "aiBaseUrl");
@@ -38,7 +39,7 @@ function entryFrom(fd: FormData) {
 }
 
 export async function addKnowledge(fd: FormData) {
-  await requireUser();
+  await assertPermission("ai.manage");
   const e = entryFrom(fd);
   if (!e.answer || (e.kind === "qa" && !e.question)) redirect("/ai?error=entry");
   await db.insert(aiKnowledge).values({ ...e, active: true });
@@ -46,7 +47,7 @@ export async function addKnowledge(fd: FormData) {
 }
 
 export async function updateKnowledge(id: string, fd: FormData) {
-  await requireUser();
+  await assertPermission("ai.manage");
   const e = entryFrom(fd);
   if (!e.answer || (e.kind === "qa" && !e.question)) redirect("/ai?error=entry");
   await db.update(aiKnowledge).set(e).where(eq(aiKnowledge.id, id));
@@ -55,13 +56,13 @@ export async function updateKnowledge(id: string, fd: FormData) {
 }
 
 export async function toggleKnowledge(id: string, active: boolean) {
-  await requireUser();
+  await assertPermission("ai.manage");
   await db.update(aiKnowledge).set({ active }).where(eq(aiKnowledge.id, id));
   revalidatePath("/ai");
 }
 
 export async function deleteKnowledge(id: string) {
-  await requireUser();
+  await assertPermission("ai.manage");
   await db.delete(aiKnowledge).where(eq(aiKnowledge.id, id));
   revalidatePath("/ai");
 }
@@ -93,7 +94,7 @@ function parseCsv(text: string): string[][] {
 }
 
 export async function importKnowledgeCsv(fd: FormData) {
-  await requireUser();
+  await assertPermission("ai.manage");
   const file = fd.get("file");
   if (!(file instanceof File) || !file.size) redirect("/ai?error=csv");
   const rows = parseCsv((await file.text()).replace(/^﻿/, ""));
@@ -109,7 +110,7 @@ export async function importKnowledgeCsv(fd: FormData) {
 export async function runPlayground(
   question: string,
 ): Promise<{ ok: true; reply: string; handoff: boolean; usage: AiUsageInfo; knowledge: number } | { ok: false; error: string }> {
-  await requireUser();
+  await assertPermission("ai.manage");
   if (!question.trim()) return { ok: false, error: "Type a question first." };
   try {
     const r = await testAi(question.slice(0, 2000));
@@ -163,7 +164,7 @@ function chunkText(text: string): string[] {
 }
 
 export async function uploadKnowledgePdf(fd: FormData) {
-  await requireUser();
+  await assertPermission("ai.manage");
   const files = fd.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
   if (!files.length) redirect("/ai?error=pdf");
   let added = 0;
@@ -206,14 +207,14 @@ export async function uploadKnowledgePdf(fd: FormData) {
 }
 
 export async function deleteKnowledgeSource(source: string) {
-  await requireUser();
+  await assertPermission("ai.manage");
   if (!source) return;
   await db.delete(aiKnowledge).where(eq(aiKnowledge.source, source));
   revalidatePath("/ai");
 }
 
 export async function toggleKnowledgeSource(source: string, active: boolean) {
-  await requireUser();
+  await assertPermission("ai.manage");
   if (!source) return;
   await db.update(aiKnowledge).set({ active }).where(eq(aiKnowledge.source, source));
   revalidatePath("/ai");

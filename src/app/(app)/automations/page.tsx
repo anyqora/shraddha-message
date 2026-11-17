@@ -7,8 +7,10 @@ import { Chip, Empty, Page } from "@/components/ui";
 import { AutomationActiveToggle, AutomationRecipes, DeleteAutomationButton } from "@/components/automation-controls";
 import { TRIGGER_META, triggerSummary } from "./validate";
 import { createRecipe, deleteAutomation, toggleAutomation } from "./actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function AutomationsPage() {
+  await requirePagePermission("automations.manage");
   const [rows, allLists] = await Promise.all([
     db.select().from(automations).orderBy(desc(automations.createdAt)),
     db.select({ id: lists.id, name: lists.name }).from(lists),

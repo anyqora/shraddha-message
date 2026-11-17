@@ -11,10 +11,12 @@ import { formatDateTime, timeAgo } from "@/lib/utils";
 import { cumulativeHours, dayLabel } from "../shared";
 import { dripOptions } from "../data";
 import { enrollList, enrollSelected, removeEnrollment, saveSequence, searchContactsForDrip, stopEnrollment } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 const STATUS_COLOR = { active: "blue", completed: "green", stopped: "gray", failed: "red" } as const;
 
 export default async function DripDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePagePermission("drips.manage");
   const { id } = await params;
   const [s] = await db.select().from(dripSequences).where(eq(dripSequences.id, id)).limit(1);
   if (!s) notFound();

@@ -28,6 +28,7 @@ import { DealForm } from "@/components/crm-deal-form";
 import { CrmNotes } from "@/components/crm-notes";
 import { CrmTasks } from "@/components/crm-tasks";
 import { deleteDeal, saveDeal } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function DealPage({
   params,
@@ -36,6 +37,7 @@ export default async function DealPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tab?: string; edit?: string; error?: string }>;
 }) {
+  await requirePagePermission("deals.manage");
   const { id } = await params;
   const sp = await searchParams;
   const user = await requireUser();

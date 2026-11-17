@@ -3,8 +3,10 @@ import { IconArrowDown, IconArrowUp, IconPlus, IconSettings, IconTrash } from "@
 import { ensureDefaultPipeline, getAllStages } from "@/lib/crm-pipeline";
 import { CHIP_COLORS, Chip, Notice, Page } from "@/components/ui";
 import { addPipeline, addStage, deleteStage, moveStage, renamePipeline, updateStage } from "../actions";
+import { requirePagePermission } from "@/lib/permissions";
 
 export default async function DealSettingsPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  await requirePagePermission("deals.manage");
   const sp = await searchParams;
   const pipes = await ensureDefaultPipeline();
   const stages = await getAllStages();

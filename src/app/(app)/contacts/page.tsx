@@ -8,12 +8,15 @@ import { loadContactRows, PAGE } from "@/lib/contacts-query";
 import { Page, Empty } from "@/components/ui";
 import { ContactsTable } from "@/components/contacts-table";
 import { addToList, deleteContacts } from "./actions";
+import { can } from "@/lib/permissions";
+import { requireUser } from "@/lib/auth";
 
 export default async function ContactsPage({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string; list?: string; status?: string; segment?: string; page?: string }>;
 }) {
+  const canDelete = await can(await requireUser(), "contacts.delete");
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
   const conds: SQL[] = [];
@@ -76,7 +79,7 @@ export default async function ContactsPage({
         <span className="ml-auto text-sm text-ink-3">{total.toLocaleString("en-IN")} contacts</span>
       </form>
       {rows.length ? (
-        <ContactsTable rows={rows} lists={allLists} onDelete={deleteContacts} onAddToList={addToList} />
+        <ContactsTable rows={rows} lists={allLists} onDelete={canDelete ? deleteContacts : undefined} onAddToList={addToList} />
       ) : (
         <Empty icon={<IconUser />} title="No contacts found" hint="Add a contact or import a CSV / Excel file." action={<Link href="/contacts/import" className="btn btn-primary"><IconUpload size={14} /> Import contacts</Link>} />
       )}

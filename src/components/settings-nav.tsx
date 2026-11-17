@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconBrandWhatsapp, IconCode, IconMail, IconUserCircle, IconUsers } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { canAccessRoute } from "@/lib/permission-keys";
 
 const ITEMS = [
   { href: "/settings", label: "WhatsApp", icon: IconBrandWhatsapp, group: "Workspace" },
@@ -13,7 +14,7 @@ const ITEMS = [
   { href: "/settings/account", label: "My account", icon: IconUserCircle, group: "User" },
 ];
 
-export function SettingsNav() {
+export function SettingsNav({ permissions }: { permissions: string[] }) {
   const path = usePathname();
   const groups = ["User", "Workspace"];
   return (
@@ -21,7 +22,7 @@ export function SettingsNav() {
       {groups.map((g) => (
         <div key={g} className="flex gap-1 md:mb-3 md:flex-col">
           <div className="hidden px-2 pb-1 text-xs font-medium text-ink-4 md:block">{g}</div>
-          {ITEMS.filter((i) => i.group === g).map((i) => {
+          {ITEMS.filter((i) => i.group === g && canAccessRoute(permissions, i.href)).map((i) => {
             const active = i.href === "/settings" ? path === "/settings" : path.startsWith(i.href);
             const Icon = i.icon;
             return (
