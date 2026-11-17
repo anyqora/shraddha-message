@@ -8,6 +8,8 @@ import { requireUser } from "@/lib/auth";
 import { errorMessage, waClient } from "@/lib/whatsapp";
 import { recordOutbound } from "@/lib/messaging";
 import { buildSendComponents, renderTemplatePreview } from "@/lib/template-utils";
+import { pauseBot } from "@/lib/chatbot";
+import { getSettings } from "@/lib/settings";
 
 type Result = { ok: boolean; message: string };
 
@@ -47,8 +49,16 @@ export async function sendChatMessage(contactId: string, _: unknown, fd: FormDat
     revalidatePath(`/inbox/${contactId}`);
     return { ok: false, message: msg };
   }
+  await pauseBot(contactId, (await getSettings()).botPauseHours);
   revalidatePath(`/inbox/${contactId}`);
   return { ok: true, message: "" };
+}
+
+export async function toggleBot(contactId: string, paused: boolean) {
+  await requireUser();
+  if (paused) await pauseBot(contactId, (await getSettings()).botPauseHours);
+  else await db.update(contacts).set({ botPausedUntil: null }).where(eq(contacts.id, contactId));
+  revalidatePath(`/inbox/${contactId}`);
 }
 
 export async function sendChatTemplate(contactId: string, templateId: string, params: { header: string[]; body: string[] }): Promise<Result> {

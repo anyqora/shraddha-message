@@ -72,6 +72,10 @@ export const contacts = mysqlTable(
     lastMessageAt: datetime("last_message_at", { mode: "date", fsp: 3 }),
     lastInboundAt: datetime("last_inbound_at", { mode: "date", fsp: 3 }),
     lastMessagePreview: varchar("last_message_preview", { length: 255 }).notNull().default(""),
+    botPausedUntil: datetime("bot_paused_until", { mode: "date" }),
+    companyId: varchar("company_id", { length: 36 }),
+    assignedTo: varchar("assigned_to", { length: 36 }),
+    chatStatus: mysqlEnum("chat_status", ["open", "closed"]).notNull().default("open"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -222,6 +226,142 @@ export const messages = mysqlTable(
   ],
 );
 
+/* ------------------------------------------------------------ chatbot */
+
+export type BotOption = { title: string; description?: string; next?: string | null };
+
+export const botRules = mysqlTable(
+  "bot_rules",
+  {
+    id: uuid().primaryKey(),
+    name: varchar("name", { length: 191 }).notNull(),
+    // keyword: matches typed text · welcome: first message / after a quiet period · fallback: nothing else matched · menu: only reached from a button/list option
+    trigger: mysqlEnum("trigger", ["keyword", "welcome", "fallback", "menu"]).notNull().default("keyword"),
+    keywords: varchar("keywords", { length: 1000 }).notNull().default(""),
+    matchType: mysqlEnum("match_type", ["exact", "contains", "starts"]).notNull().default("contains"),
+    replyType: mysqlEnum("reply_type", ["text", "buttons", "list"]).notNull().default("text"),
+    header: varchar("header", { length: 60 }).notNull().default(""),
+    body: text("body").notNull(),
+    footer: varchar("footer", { length: 60 }).notNull().default(""),
+    listButton: varchar("list_button", { length: 20 }).notNull().default("Menu"),
+    options: json("options").$type<BotOption[]>().notNull().default([]),
+    handoff: boolean("handoff").notNull().default(false),
+    active: boolean("active").notNull().default(true),
+    priority: int("priority").notNull().default(100),
+    hits: int("hits").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("bot_rules_trigger_idx").on(t.trigger, t.active)],
+);
+
+export type BotRule = typeof botRules.$inferSelect;
+
+/* ---------------------------------------------------------------- CRM */
+
+export const companies = mysqlTable(
+  "companies",
+  {
+    id: uuid().primaryKey(),
+    name: varchar("name", { length: 191 }).notNull(),
+    domain: varchar("domain", { length: 191 }).notNull().default(""),
+    industry: varchar("industry", { length: 191 }).notNull().default(""),
+    city: varchar("city", { length: 191 }).notNull().default(""),
+    phone: varchar("phone", { length: 32 }).notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("companies_name_idx").on(t.name)],
+);
+
+export const pipelines = mysqlTable("pipelines", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  position: int("position").notNull().default(0),
+  createdAt: createdAt(),
+});
+
+export const pipelineStages = mysqlTable(
+  "pipeline_stages",
+  {
+    id: uuid().primaryKey(),
+    pipelineId: varchar("pipeline_id", { length: 36 }).notNull(),
+    name: varchar("name", { length: 191 }).notNull(),
+    color: varchar("color", { length: 16 }).notNull().default("gray"),
+    position: int("position").notNull().default(0),
+    kind: mysqlEnum("kind", ["open", "won", "lost"]).notNull().default("open"),
+  },
+  (t) => [index("stages_pipeline_idx").on(t.pipelineId, t.position)],
+);
+
+export const deals = mysqlTable(
+  "deals",
+  {
+    id: uuid().primaryKey(),
+    title: varchar("title", { length: 191 }).notNull(),
+    amount: int("amount").notNull().default(0), // whole rupees
+    currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+    pipelineId: varchar("pipeline_id", { length: 36 }).notNull(),
+    stageId: varchar("stage_id", { length: 36 }).notNull(),
+    contactId: varchar("contact_id", { length: 36 }),
+    companyId: varchar("company_id", { length: 36 }),
+    ownerId: varchar("owner_id", { length: 36 }),
+    expectedClose: datetime("expected_close", { mode: "date" }),
+    position: int("position").notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("deals_stage_idx").on(t.stageId, t.position), index("deals_contact_idx").on(t.contactId)],
+);
+
+export const tasks = mysqlTable(
+  "tasks",
+  {
+    id: uuid().primaryKey(),
+    title: varchar("title", { length: 255 }).notNull(),
+    body: text("body").notNull(),
+    status: mysqlEnum("status", ["todo", "in_progress", "done"]).notNull().default("todo"),
+    dueAt: datetime("due_at", { mode: "date" }),
+    assigneeId: varchar("assignee_id", { length: 36 }),
+    contactId: varchar("contact_id", { length: 36 }),
+    companyId: varchar("company_id", { length: 36 }),
+    dealId: varchar("deal_id", { length: 36 }),
+    createdBy: varchar("created_by", { length: 36 }),
+    completedAt: datetime("completed_at", { mode: "date" }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("tasks_status_due_idx").on(t.status, t.dueAt), index("tasks_contact_idx").on(t.contactId)],
+);
+
+export const notes = mysqlTable(
+  "notes",
+  {
+    id: uuid().primaryKey(),
+    body: text("body").notNull(),
+    contactId: varchar("contact_id", { length: 36 }),
+    companyId: varchar("company_id", { length: 36 }),
+    dealId: varchar("deal_id", { length: 36 }),
+    authorId: varchar("author_id", { length: 36 }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("notes_contact_idx").on(t.contactId), index("notes_company_idx").on(t.companyId), index("notes_deal_idx").on(t.dealId)],
+);
+
+export const quickReplies = mysqlTable("quick_replies", {
+  id: uuid().primaryKey(),
+  shortcut: varchar("shortcut", { length: 64 }).notNull(),
+  body: text("body").notNull(),
+  createdAt: createdAt(),
+});
+
+export type Company = typeof companies.$inferSelect;
+export type Pipeline = typeof pipelines.$inferSelect;
+export type PipelineStage = typeof pipelineStages.$inferSelect;
+export type Deal = typeof deals.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
+export type Note = typeof notes.$inferSelect;
+export type QuickReply = typeof quickReplies.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Contact = typeof contacts.$inferSelect;
 export type List = typeof lists.$inferSelect;

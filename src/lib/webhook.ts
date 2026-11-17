@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { contacts, messages, type MessageMedia } from "@/db/schema";
 import { applyStatus, previewOf, upsertContactByPhone } from "./messaging";
+import { runChatbot } from "./chatbot";
 
 const OPT_OUT = /^(stop|unsubscribe|stop all|opt ?out|cancel)$/i;
 const OPT_IN = /^(start|subscribe|unstop|opt ?in)$/i;
@@ -20,10 +21,15 @@ type WaMessage = {
   document?: { id: string; mime_type: string; caption?: string; filename?: string };
   location?: { latitude: number; longitude: number; name?: string; address?: string };
   button?: { text: string; payload: string };
-  interactive?: { button_reply?: { title: string }; list_reply?: { title: string; description?: string } };
+  interactive?: { button_reply?: { id: string; title: string }; list_reply?: { id: string; title: string; description?: string } };
   reaction?: { emoji: string; message_id: string };
   contacts?: { name?: { formatted_name?: string }; phones?: { phone?: string }[] }[];
 };
+
+function replyIdOf(m: WaMessage): string | null {
+  const i = m.interactive as any;
+  return i?.button_reply?.id ?? i?.list_reply?.id ?? (m.button?.payload || null);
+}
 
 function extract(m: WaMessage): { body: string; media: MessageMedia | null } {
   switch (m.type) {
@@ -75,6 +81,7 @@ export async function handleWebhook(payload: any) {
       for (const m of (v.messages ?? []) as WaMessage[]) {
         const phone = String(m.from).replace(/\D/g, "");
         const contactId = await upsertContactByPhone(phone, names.get(m.from));
+        const [before] = await db.select({ lastInboundAt: contacts.lastInboundAt }).from(contacts).where(eq(contacts.id, contactId)).limit(1);
         const { body, media } = extract(m);
         const at = new Date(Number(m.timestamp) * 1000 || Date.now());
 
@@ -95,6 +102,9 @@ export async function handleWebhook(payload: any) {
         if (m.type === "text" && OPT_OUT.test(text)) Object.assign(patch, { optedOut: true, optedOutAt: new Date() });
         if (m.type === "text" && OPT_IN.test(text)) Object.assign(patch, { optedOut: false, optedOutAt: null });
         await db.update(contacts).set(patch).where(eq(contacts.id, contactId));
+        if (!OPT_OUT.test(text)) {
+          await runChatbot(contactId, text, replyIdOf(m), before?.lastInboundAt ?? null).catch((e) => console.error("chatbot error", e));
+        }
       }
     }
   }

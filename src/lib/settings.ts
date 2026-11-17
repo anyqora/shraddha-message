@@ -15,6 +15,8 @@ export type AppSettings = {
   waDisplayPhone: string;
   defaultCountryCode: string;
   throttlePerMinute: number;
+  botEnabled: boolean;
+  botPauseHours: number;
 };
 
 const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret"]);
@@ -29,6 +31,8 @@ const DEFAULTS: AppSettings = {
   waDisplayPhone: "",
   defaultCountryCode: "91",
   throttlePerMinute: 60,
+  botEnabled: false,
+  botPauseHours: 12,
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -38,6 +42,8 @@ export async function getSettings(): Promise<AppSettings> {
     if (!(r.key in DEFAULTS)) continue;
     let v: unknown = SECRET_KEYS.has(r.key) ? safeDecrypt(r.value) : r.value;
     if (r.key === "throttlePerMinute") v = Math.max(1, Number(v) || DEFAULTS.throttlePerMinute);
+    if (r.key === "botPauseHours") v = Math.max(1, Number(v) || DEFAULTS.botPauseHours);
+    if (r.key === "botEnabled") v = v === "true";
     out[r.key] = v;
   }
   return out as AppSettings;
