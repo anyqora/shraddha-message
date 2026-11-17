@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+/* Twenty-style design tokens */
+@theme {
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --color-app: #f1f1f1;
+  --color-panel: #ffffff;
+  --color-soft: #fcfcfc;
+  --color-hover: #f1f1f1;
+  --color-line: #ebebeb;
+  --color-line-light: #f1f1f1;
+  --color-line-strong: #d6d6d6;
+  --color-ink: #333333;
+  --color-ink-2: #666666;
+  --color-ink-3: #999999;
+  --color-ink-4: #b3b3b3;
+  --color-accent: #1961ed;
+  --color-accent-soft: #e8efff;
+  --color-danger: #e5484d;
+  --color-success: #2f9e44;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 13px;
+}
+
+html,
+body {
+  height: 100%;
+}
+body {
+  @apply bg-app text-ink antialiased;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+::selection {
+  background: #d4e2ff;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-sm border border-line bg-panel px-2 text-sm font-medium text-ink-2 whitespace-nowrap transition-colors hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-accent bg-accent text-white hover:bg-[#1453cc];
+  }
+  .btn-danger {
+    @apply border-line text-danger hover:bg-[#fff1f1];
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent;
+  }
+  .input {
+    @apply h-8 w-full rounded-sm border border-line bg-panel px-2 text-sm text-ink outline-none placeholder:text-ink-4 focus:border-accent focus:ring-2 focus:ring-accent/15;
+  }
+  textarea.input {
+    @apply h-auto py-1.5 leading-5;
+  }
+  .label {
+    @apply mb-1 block text-xs font-semibold tracking-wide text-ink-3 uppercase;
+  }
+  .card {
+    @apply rounded-lg border border-line bg-panel;
+  }
+  .table-grid th {
+    @apply h-8 border-r border-b border-line-light px-2 text-left text-sm font-medium whitespace-nowrap text-ink-3;
+  }
+  .table-grid td {
+    @apply h-8 border-r border-b border-line-light px-2 text-sm whitespace-nowrap text-ink;
+  }
+  .table-grid tr:hover td {
+    @apply bg-soft;
+  }
+}
