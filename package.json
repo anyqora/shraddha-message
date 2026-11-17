@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/postbuild.mjs",
+    "build": "next build --webpack && node scripts/postbuild.mjs",
     "start": "node .next/standalone/server.js",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
