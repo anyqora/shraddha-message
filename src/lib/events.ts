@@ -27,6 +27,7 @@ export async function emit(event: AppEvent): Promise<void> {
     import("./outgoing-webhooks").then((m) => m.handleEvent),
     import("./drips").then((m) => m.handleEvent),
     import("./sheets-sync").then((m) => m.handleEvent),
+    import("./link-tags").then((m) => m.handleEvent),
   ]);
   await Promise.all(
     handlers.map((h) =>

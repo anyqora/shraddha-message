@@ -2,7 +2,8 @@ import Link from "next/link";
 import { and, asc, eq, like, or, sql, type SQL } from "drizzle-orm";
 import { IconUser, IconPlus, IconUpload, IconSearch } from "@tabler/icons-react";
 import { db } from "@/lib/db";
-import { contacts, lists } from "@/db/schema";
+import { contacts, lists, segments } from "@/db/schema";
+import { getSegment, segmentWhere } from "@/lib/segments";
 import { loadContactRows, PAGE } from "@/lib/contacts-query";
 import { Page, Empty } from "@/components/ui";
 import { ContactsTable } from "@/components/contacts-table";
@@ -11,7 +12,7 @@ import { addToList, deleteContacts } from "./actions";
 export default async function ContactsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; list?: string; status?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; list?: string; status?: string; segment?: string; page?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
@@ -23,8 +24,16 @@ export default async function ContactsPage({
   if (sp.list) conds.push(sql`${contacts.id} in (select contact_id from list_members where list_id = ${sp.list})`);
   if (sp.status === "opted_out") conds.push(eq(contacts.optedOut, true));
   if (sp.status === "active") conds.push(eq(contacts.optedOut, false));
+  if (sp.segment) {
+    const seg = await getSegment(sp.segment);
+    if (seg) conds.push(segmentWhere(seg));
+  }
   const where = conds.length ? and(...conds) : undefined;
-  const [{ rows, total }, allLists] = await Promise.all([loadContactRows(where, page), db.select().from(lists).orderBy(asc(lists.name))]);
+  const [{ rows, total }, allLists, allSegments] = await Promise.all([
+    loadContactRows(where, page),
+    db.select().from(lists).orderBy(asc(lists.name)),
+    db.select({ id: segments.id, name: segments.name }).from(segments).orderBy(asc(segments.name)),
+  ]);
   const pages = Math.max(1, Math.ceil(total / PAGE));
   const qs = (p: number) => {
     const u = new URLSearchParams({ ...(sp as Record<string, string>), page: String(p) });
@@ -52,6 +61,12 @@ export default async function ContactsPage({
           <option value="">All lists</option>
           {allLists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
         </select>
+        {allSegments.length > 0 && (
+          <select name="segment" defaultValue={sp.segment ?? ""} className="input h-7 w-auto">
+            <option value="">Any segment</option>
+            {allSegments.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
         <select name="status" defaultValue={sp.status ?? ""} className="input h-7 w-auto">
           <option value="">Any status</option>
           <option value="active">Subscribed</option>

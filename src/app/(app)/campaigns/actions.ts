@@ -12,11 +12,15 @@ import { normalizePhone } from "@/lib/phone";
 import { resolveSource, templateShape } from "@/lib/template-utils";
 import { errorMessage, waClient } from "@/lib/whatsapp";
 import { runCampaigns } from "@/lib/campaign-runner";
+import { getSegment, segmentWhere } from "@/lib/segments";
 
 export type CampaignInput = {
   name: string;
   templateId: string;
-  audience: { kind: "list"; listId: string } | { kind: "csv"; fileName: string; phoneColumn: string; nameColumn: string; rows: Record<string, string>[] };
+  audience:
+    | { kind: "list"; listId: string }
+    | { kind: "segment"; segmentId: string }
+    | { kind: "csv"; fileName: string; phoneColumn: string; nameColumn: string; rows: Record<string, string>[] };
   mapping: { header: VarSource[]; body: VarSource[] };
   scheduleAt: string | null; // ISO
 };
@@ -64,6 +68,19 @@ export async function createCampaign(_: unknown, fd: FormData): Promise<{ ok: bo
         .where(eq(listMembers.listId, listId));
       for (const c of rows) {
         if (c.optedOut) skipped++;
+        else recips.push({ contactId: c.id, phone: c.phone, name: c.name, params: build(c) });
+      }
+    } else if (input.audience.kind === "segment") {
+      const seg = await getSegment(input.audience.segmentId);
+      if (!seg) throw new Error("Choose a segment.");
+      audience = `Segment: ${seg.name}`;
+      const rows = await db
+        .select({ id: contacts.id, phone: contacts.phone, name: contacts.name, email: contacts.email, custom: contacts.custom, optedOut: contacts.optedOut, channel: contacts.channel })
+        .from(contacts)
+        .where(segmentWhere(seg));
+      for (const c of rows) {
+        if (c.optedOut) skipped++;
+        else if (c.channel !== "whatsapp" || !c.phone) skipped++;
         else recips.push({ contactId: c.id, phone: c.phone, name: c.name, params: build(c) });
       }
     } else {

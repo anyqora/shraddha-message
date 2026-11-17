@@ -48,6 +48,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/inbox", label: "Inbox", icon: IconMessageCircle, tint: "#2f9e44", badge: "unread" },
       { href: "/contacts", label: "Contacts", icon: IconUser, tint: "#e8590c" },
       { href: "/lists", label: "Lists", icon: IconList, tint: "#7048e8" },
+      { href: "/segments", label: "Segments", icon: IconFilter, tint: "#495057" },
     ],
   },
   {
@@ -56,6 +57,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/companies", label: "Companies", icon: IconBuilding, tint: "#0c8599" },
       { href: "/deals", label: "Deals", icon: IconTargetArrow, tint: "#2f9e44" },
       { href: "/tasks", label: "Tasks", icon: IconChecklist, tint: "#1961ed" },
+      { href: "/products", label: "Products", icon: IconShoppingBag, tint: "#d6336c" },
+      { href: "/payments", label: "Payments", icon: IconCreditCard, tint: "#2f9e44" },
     ],
   },
   {
@@ -66,7 +69,18 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/chatbot", label: "Chatbot", icon: IconRobot, tint: "#b08800" },
       { href: "/ai", label: "AI Assistant", icon: IconSparkles, tint: "#7048e8" },
       { href: "/automations", label: "Automations", icon: IconBolt, tint: "#e8590c" },
+      { href: "/drips", label: "Drips & wishes", icon: IconTimeline, tint: "#7048e8" },
       { href: "/widget", label: "Website chat", icon: IconWorld, tint: "#0c8599" },
+      { href: "/links", label: "QR & links", icon: IconQrcode, tint: "#495057" },
+    ],
+  },
+  {
+    title: "Insights",
+    items: [
+      { href: "/reports", label: "Reports", icon: IconChartBar, tint: "#1961ed" },
+      { href: "/integrations", label: "Integrations", icon: IconPlugConnected, tint: "#2f9e44" },
+      { href: "/audit", label: "Audit log", icon: IconHistory, tint: "#999999" },
+      { href: "/backup", label: "Backup", icon: IconDatabaseExport, tint: "#999999" },
     ],
   },
 ];

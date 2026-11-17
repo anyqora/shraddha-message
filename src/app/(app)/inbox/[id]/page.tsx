@@ -101,6 +101,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
             {!msgs.length && <div className="pt-10 text-center text-sm text-[#54656f]">No messages yet. Start with a template.</div>}
           </ScrollToBottom>
           <Composer
+            contactId={id}
             key={id}
             windowOpen={windowOpen}
             templates={tpls.map((t) => ({ id: t.id, name: t.name, language: t.language, components: t.components }))}

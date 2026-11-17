@@ -9,8 +9,26 @@ import { requireUser } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
 import { getSettings } from "@/lib/settings";
 import { emit } from "@/lib/events";
+import { toMonthDay } from "@/app/(app)/drips/shared";
 
-export type ImportRow = { phone: string; name?: string; email?: string; custom?: Record<string, string> };
+export type ImportRow = { phone: string; name?: string; email?: string; custom?: Record<string, string>; birthday?: string; anniversary?: string };
+
+const BIRTHDAY_KEYS = /^(birthday|birth ?day|dob|d\.o\.b\.?|date of birth|birth ?date)$/i;
+const ANNIVERSARY_KEYS = /^(anniversary|wedding|wedding date|wedding anniversary|marriage anniversary|anniversary date)$/i;
+
+/** Pull birthday / anniversary out of explicit fields or matching custom columns (stored as "MM-DD"). */
+function importDates(r: ImportRow): { custom: Record<string, string>; birthday: string | null; anniversary: string | null } {
+  const custom: Record<string, string> = {};
+  let birthday = toMonthDay(r.birthday);
+  let anniversary = toMonthDay(r.anniversary);
+  for (const [k, v] of Object.entries(r.custom ?? {})) {
+    const key = k.trim();
+    if (BIRTHDAY_KEYS.test(key) && toMonthDay(v)) birthday ??= toMonthDay(v);
+    else if (ANNIVERSARY_KEYS.test(key) && toMonthDay(v)) anniversary ??= toMonthDay(v);
+    else custom[k] = v;
+  }
+  return { custom, birthday, anniversary };
+}
 
 export async function saveContact(formData: FormData) {
   await requireUser();
@@ -31,6 +49,9 @@ export async function saveContact(formData: FormData) {
     email: String(formData.get("email") ?? "").trim(),
     custom,
     ...(formData.has("company_present") ? { companyId: String(formData.get("companyId") ?? "").trim() || null } : {}),
+    ...(formData.has("dates_present")
+      ? { birthday: toMonthDay(String(formData.get("birthday") ?? "")), anniversary: toMonthDay(String(formData.get("anniversary") ?? "")) }
+      : {}),
   };
   let cid = id;
   try {
@@ -105,13 +126,20 @@ export async function importContacts(rows: ImportRow[], listId?: string, overwri
     const chunk = list.slice(i, i + 500);
     await db
       .insert(contacts)
-      .values(chunk.map((r) => ({ id: crypto.randomUUID(), phone: r.phone, name: (r.name ?? "").trim().slice(0, 191), email: (r.email ?? "").trim().slice(0, 191), custom: r.custom ?? {} })))
+      .values(
+        chunk.map((r) => {
+          const d = importDates(r);
+          return { id: crypto.randomUUID(), phone: r.phone, name: (r.name ?? "").trim().slice(0, 191), email: (r.email ?? "").trim().slice(0, 191), custom: d.custom, birthday: d.birthday, anniversary: d.anniversary };
+        }),
+      )
       .onDuplicateKeyUpdate({
         set: overwrite
           ? {
               name: sql`if(values(${contacts.name}) <> '', values(${contacts.name}), ${contacts.name})`,
               email: sql`if(values(${contacts.email}) <> '', values(${contacts.email}), ${contacts.email})`,
               custom: sql`json_merge_patch(${contacts.custom}, values(${contacts.custom}))`,
+              birthday: sql`coalesce(values(${contacts.birthday}), ${contacts.birthday})`,
+              anniversary: sql`coalesce(values(${contacts.anniversary}), ${contacts.anniversary})`,
             }
           : { phone: sql`${contacts.phone}` },
       });

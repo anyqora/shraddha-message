@@ -2,9 +2,11 @@
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { IconSend, IconPaperclip, IconTemplate, IconX, IconBolt, IconSettings } from "@tabler/icons-react";
+import { IconSend, IconPaperclip, IconTemplate, IconX, IconBolt, IconSettings, IconBuildingStore, IconCurrencyRupee } from "@tabler/icons-react";
 import type { TemplateComponent } from "@/db/schema";
 import { fillVars, templateShape } from "@/lib/template-utils";
+import { ProductPicker } from "./product-picker";
+import { PaymentPopover } from "./payment-popover";
 
 type Tpl = { id: string; name: string; language: string; components: TemplateComponent[] };
 type Result = { ok: boolean; message: string };
@@ -19,6 +21,7 @@ export function Composer({
   sendText,
   sendTemplate,
   quickReplies = [],
+  contactId,
 }: {
   windowOpen: boolean;
   templates: Tpl[];
@@ -26,7 +29,16 @@ export function Composer({
   sendText: (s: unknown, fd: FormData) => Promise<Result>;
   sendTemplate: (templateId: string, params: { header: string[]; body: string[] }) => Promise<Result>;
   quickReplies?: QuickReply[];
+  /** Enables the "Send product" and "Payment link" buttons. */
+  contactId?: string;
 }) {
+  const [panel, setPanel] = useState<null | "product" | "payment">(null);
+  const [panelMsg, setPanelMsg] = useState("");
+  const togglePanel = (p: "product" | "payment") => {
+    setPanelMsg("");
+    setQrBrowse(false);
+    setPanel((cur) => (cur === p ? null : p));
+  };
   const formRef = useRef<HTMLFormElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -95,7 +107,7 @@ export function Composer({
 
   return (
     <div className="shrink-0 border-t border-line bg-soft">
-      {(state && !state.ok && state.message) || tplMsg ? <div className="px-3 pt-2 text-xs text-danger">{tplMsg || state?.message}</div> : null}
+      {(state && !state.ok && state.message) || tplMsg || panelMsg ? <div className="px-3 pt-2 text-xs text-danger">{panelMsg || tplMsg || state?.message}</div> : null}
       {showTpl && (
         <div className="space-y-2 border-b border-line p-3">
           {!templates.length ? (
@@ -144,6 +156,7 @@ export function Composer({
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
             setQrBrowse(!qrBrowse);
+            setPanel(null);
             taRef.current?.focus();
           }}
         >
@@ -153,6 +166,16 @@ export function Composer({
           <IconPaperclip size={15} />
           <input type="file" name="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} disabled={!windowOpen} />
         </label>
+        {contactId && (
+          <>
+            <button type="button" title="Send product" disabled={!windowOpen} className={panel === "product" ? "btn border-accent text-accent" : "btn"} onClick={() => togglePanel("product")}>
+              <IconBuildingStore size={15} />
+            </button>
+            <button type="button" title="Payment link" disabled={!windowOpen} className={panel === "payment" ? "btn border-accent text-accent" : "btn"} onClick={() => togglePanel("payment")}>
+              <IconCurrencyRupee size={15} />
+            </button>
+          </>
+        )}
         <div className="flex-1">
           {file && (
             <div className="mb-1 flex items-center gap-1 text-xs text-ink-2">
@@ -161,7 +184,11 @@ export function Composer({
             </div>
           )}
           <div className="relative">
-          {menuOpen && (
+          {contactId && windowOpen && panel === "product" && (
+            <ProductPicker contactId={contactId} onClose={() => setPanel(null)} onError={setPanelMsg} />
+          )}
+          {contactId && windowOpen && panel === "payment" && <PaymentPopover contactId={contactId} onClose={() => setPanel(null)} />}
+          {menuOpen && !panel && (
             <div className="absolute bottom-full left-0 z-30 mb-1 w-full max-w-md overflow-hidden rounded-md border border-line bg-panel text-sm shadow-lg">
               <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-[11px] font-medium tracking-wide text-ink-3 uppercase">
                 <span className="flex items-center gap-1"><IconBolt size={12} /> Quick replies</span>

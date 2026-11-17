@@ -4,6 +4,45 @@ import { useState } from "react";
 import { IconPlus, IconX } from "@tabler/icons-react";
 import type { Contact, List } from "@/db/schema";
 
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const DAYS_IN = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+/** Day + month selects stored as "MM-DD" (no year needed for yearly wishes). */
+function MonthDayField({ name, label, value }: { name: string; label: string; value?: string | null }) {
+  const [month, setMonth] = useState(value && /^\d{2}-\d{2}$/.test(value) ? value.slice(0, 2) : "");
+  const [day, setDay] = useState(value && /^\d{2}-\d{2}$/.test(value) ? value.slice(3) : "");
+  const max = month ? DAYS_IN[Number(month) - 1] : 31;
+  return (
+    <div className="block">
+      <span className="label">{label}</span>
+      <input type="hidden" name={name} value={month && day ? `${month}-${day}` : ""} />
+      <div className="flex gap-2">
+        <select aria-label={`${label} day`} className="input w-24" value={day} onChange={(e) => setDay(e.target.value)}>
+          <option value="">Day</option>
+          {Array.from({ length: max }, (_, i) => String(i + 1).padStart(2, "0")).map((d) => (
+            <option key={d} value={d}>{Number(d)}</option>
+          ))}
+        </select>
+        <select
+          aria-label={`${label} month`}
+          className="input flex-1"
+          value={month}
+          onChange={(e) => {
+            const m = e.target.value;
+            setMonth(m);
+            if (m && day && Number(day) > DAYS_IN[Number(m) - 1]) setDay(String(DAYS_IN[Number(m) - 1]).padStart(2, "0"));
+          }}
+        >
+          <option value="">Month</option>
+          {MONTHS.map((n, i) => (
+            <option key={n} value={String(i + 1).padStart(2, "0")}>{n}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export function ContactForm({
   contact,
   lists,
@@ -50,6 +89,9 @@ export function ContactForm({
             </select>
           </label>
         )}
+        <input type="hidden" name="dates_present" value="1" />
+        <MonthDayField name="birthday" label="Birthday" value={contact?.birthday} />
+        <MonthDayField name="anniversary" label="Anniversary" value={contact?.anniversary} />
       </div>
 
       <div>

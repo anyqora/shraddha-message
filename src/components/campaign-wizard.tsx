@@ -24,19 +24,26 @@ export function CampaignWizard({
   templates,
   lists,
   customKeys,
+  segments = [],
   defaultList,
+  defaultSegment,
   action,
 }: {
   templates: Tpl[];
   lists: { id: string; name: string; count: number }[];
   customKeys: string[];
+  segments?: { id: string; name: string; count: number }[];
   defaultList?: string;
+  defaultSegment?: string;
   action: (s: unknown, fd: FormData) => Promise<{ ok: boolean; message: string }>;
 }) {
   const [state, formAction, pending] = useActionState(action, null);
   const [name, setName] = useState("");
   const [tplId, setTplId] = useState(templates[0]?.id ?? "");
-  const [kind, setKind] = useState<"list" | "csv">(defaultList || lists.length ? "list" : "csv");
+  const [kind, setKind] = useState<"list" | "segment" | "csv">(
+    defaultSegment && segments.some((s) => s.id === defaultSegment) ? "segment" : defaultList || lists.length ? "list" : "csv",
+  );
+  const [segmentId, setSegmentId] = useState(defaultSegment && segments.some((s) => s.id === defaultSegment) ? defaultSegment : segments[0]?.id ?? "");
   const [listId, setListId] = useState(defaultList ?? lists[0]?.id ?? "");
   const [csv, setCsv] = useState<{ name: string; headers: string[]; rows: Record<string, string>[] } | null>(null);
   const [phoneCol, setPhoneCol] = useState("");
@@ -70,11 +77,17 @@ export function CampaignWizard({
   const resolve = (s: VarSource) =>
     s.kind === "static" ? s.value : s.kind === "column" ? sampleRow?.[s.column] ?? `{${s.column}}` : s.field === "name" ? sampleContact.name : s.field === "phone" ? sampleContact.phone : `{${s.field.replace("custom:", "")}}`;
 
-  const audienceCount = kind === "list" ? lists.find((l) => l.id === listId)?.count ?? 0 : csv?.rows.length ?? 0;
+  const audienceCount =
+    kind === "list" ? lists.find((l) => l.id === listId)?.count ?? 0 : kind === "segment" ? segments.find((s) => s.id === segmentId)?.count ?? 0 : csv?.rows.length ?? 0;
   const payload = JSON.stringify({
     name,
     templateId: tplId,
-    audience: kind === "list" ? { kind, listId } : { kind, fileName: csv?.name ?? "", phoneColumn: phoneCol, nameColumn: nameCol, rows: csv?.rows ?? [] },
+    audience:
+      kind === "list"
+        ? { kind, listId }
+        : kind === "segment"
+          ? { kind, segmentId }
+          : { kind, fileName: csv?.name ?? "", phoneColumn: phoneCol, nameColumn: nameCol, rows: csv?.rows ?? [] },
     mapping,
     scheduleAt: when === "later" && at ? new Date(at).toISOString() : null,
   });
@@ -125,9 +138,21 @@ export function CampaignWizard({
           <h2 className="font-semibold">2. Audience</h2>
           <div className="flex gap-2">
             <button type="button" className={kind === "list" ? "btn border-accent text-accent" : "btn"} onClick={() => setKind("list")}>Contact list</button>
+            <button type="button" className={kind === "segment" ? "btn border-accent text-accent" : "btn"} onClick={() => setKind("segment")}>Segment</button>
             <button type="button" className={kind === "csv" ? "btn border-accent text-accent" : "btn"} onClick={() => setKind("csv")}>Upload CSV / Excel</button>
           </div>
-          {kind === "list" ? (
+          {kind === "segment" ? (
+            segments.length ? (
+              <div className="space-y-1">
+                <select className="input" value={segmentId} onChange={(e) => setSegmentId(e.target.value)}>
+                  {segments.map((s) => <option key={s.id} value={s.id}>{s.name} — {s.count} contacts</option>)}
+                </select>
+                <p className="text-xs text-ink-3">Recipients are resolved when the campaign is created. Opted-out contacts are skipped.</p>
+              </div>
+            ) : (
+              <Notice tone="info">No segments yet. <Link href="/segments/new" className="underline">Create a segment</Link>.</Notice>
+            )
+          ) : kind === "list" ? (
             lists.length ? (
               <select className="input" value={listId} onChange={(e) => setListId(e.target.value)}>
                 {lists.map((l) => <option key={l.id} value={l.id}>{l.name} — {l.count} contacts</option>)}
