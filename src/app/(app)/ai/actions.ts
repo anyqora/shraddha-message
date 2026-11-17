@@ -17,7 +17,13 @@ export async function saveAiSettings(fd: FormData) {
   await assertPermission("ai.manage");
   const preset = str(fd, "aiProvider");
   const baseUrl =
-    preset === "openai" ? "https://api.openai.com/v1" : preset === "openrouter" ? "https://openrouter.ai/api/v1" : str(fd, "aiBaseUrl");
+    preset === "openai"
+      ? "https://api.openai.com/v1"
+      : preset === "openrouter"
+        ? "https://openrouter.ai/api/v1"
+        : preset === "gemini"
+          ? "https://generativelanguage.googleapis.com/v1beta/openai"
+          : str(fd, "aiBaseUrl");
   const patch: Partial<AppSettings> = {
     aiEnabled: fd.get("aiEnabled") === "on",
     aiBaseUrl: (baseUrl || "https://api.openai.com/v1").replace(/\/+$/, ""),

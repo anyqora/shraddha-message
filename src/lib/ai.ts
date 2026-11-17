@@ -114,7 +114,14 @@ async function chatCompletion(s: AppSettings, msgs: ApiMsg[], maxTokens = 400): 
     const res = await fetch(`${baseUrl(s)}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.aiApiKey}` },
-      body: JSON.stringify({ model: s.aiModel, messages: msgs, temperature: 0.3, max_tokens: maxTokens }),
+      body: JSON.stringify({
+        model: s.aiModel,
+        messages: msgs,
+        temperature: 0.3,
+        max_tokens: maxTokens,
+        // Gemini 2.5 "thinks" by default and can spend the whole budget before answering.
+        ...(baseUrl(s).includes("generativelanguage.googleapis.com") ? { reasoning_effort: "none" } : {}),
+      }),
       signal: ctrl.signal,
       cache: "no-store",
     });

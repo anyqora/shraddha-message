@@ -5,6 +5,7 @@ import { useState } from "react";
 const PRESETS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
   openrouter: "https://openrouter.ai/api/v1",
+  gemini: "https://generativelanguage.googleapis.com/v1beta/openai",
 };
 
 export function AiProviderField({ baseUrl, disabled }: { baseUrl: string; disabled?: boolean }) {
@@ -25,6 +26,7 @@ export function AiProviderField({ baseUrl, disabled }: { baseUrl: string; disabl
       >
         <option value="openai">OpenAI</option>
         <option value="openrouter">OpenRouter</option>
+        <option value="gemini">Google Gemini</option>
         <option value="custom">Custom (OpenAI-compatible)</option>
       </select>
       <input
