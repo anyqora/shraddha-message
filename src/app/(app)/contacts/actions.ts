@@ -8,6 +8,7 @@ import { contacts, listMembers, messages, campaignRecipients } from "@/db/schema
 import { requireUser } from "@/lib/auth";
 import { normalizePhone } from "@/lib/phone";
 import { getSettings } from "@/lib/settings";
+import { emit } from "@/lib/events";
 
 export type ImportRow = { phone: string; name?: string; email?: string; custom?: Record<string, string> };
 
@@ -72,7 +73,9 @@ export async function deleteContacts(ids: string[]) {
 export async function addToList(ids: string[], listId: string) {
   await requireUser();
   if (!ids.length || !listId) return;
+  const before = new Set((await db.select({ c: listMembers.contactId }).from(listMembers).where(and(eq(listMembers.listId, listId), inArray(listMembers.contactId, ids)))).map((r) => r.c));
   await db.insert(listMembers).values(ids.map((contactId) => ({ listId, contactId }))).onDuplicateKeyUpdate({ set: { listId: sql`list_id` } });
+  for (const contactId of ids) if (!before.has(contactId)) await emit({ name: "contact.list_added", contactId, listId });
   revalidatePath("/contacts");
   revalidatePath(`/lists/${listId}`);
 }

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { runCampaigns } from "@/lib/campaign-runner";
+import { runDueAutomations } from "@/lib/automations";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,7 +16,8 @@ function authorized(req: Request) {
 
 export async function GET(req: Request) {
   if (!authorized(req)) return new Response("Unauthorized", { status: 401 });
-  const r = await runCampaigns(50_000);
-  return Response.json(r);
+  const automations = await runDueAutomations().catch((e) => ({ error: String(e) }));
+  const r = await runCampaigns(45_000);
+  return Response.json({ ...r, automations });
 }
 export const POST = GET;

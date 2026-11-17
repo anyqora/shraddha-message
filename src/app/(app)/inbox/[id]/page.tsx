@@ -10,6 +10,8 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { Composer } from "@/components/composer";
 import { WaBubble } from "@/components/wa-bubble";
 import { ScrollToBottom } from "@/components/scroll-bottom";
+import { ReactionPicker } from "@/components/reaction-picker";
+import { reactToMessage } from "@/components/reaction-actions";
 import { markRead } from "@/lib/messaging";
 import { formatPhone } from "@/lib/phone";
 import { requireUser } from "@/lib/auth";
@@ -82,7 +84,7 @@ export default async function ChatPage({ params, searchParams }: { params: Promi
               return (
                 <div key={m.id}>
                   {showDay && <div className="my-2 text-center"><span className="rounded-md bg-white/90 px-2 py-0.5 text-[11px] text-[#54656f] shadow-sm">{day}</span></div>}
-                  <WaBubble out={m.direction === "out"} body={m.body} meta={<>{m.direction === "out" && m.sentBy === "bot" && <span className="rounded bg-[#f1ebff] px-1 font-medium text-[#7048e8]">🤖 Bot</span>}{m.direction === "out" && m.sentBy && m.sentBy !== "bot" && userById.has(m.sentBy) && <span className="font-medium">{firstName(userById.get(m.sentBy)!)}</span>}{m.templateName && <span>template</span>}<span>{time}</span>{m.direction === "out" && <Tick status={m.status} error={m.error} />}</>}>
+                  <WaBubble out={m.direction === "out"} body={m.body} reaction={m.reaction || undefined} actions={m.direction === "in" && m.wamid ? <ReactionPicker current={m.reaction} react={reactToMessage.bind(null, m.id)} /> : undefined} meta={<>{m.direction === "out" && m.sentBy === "bot" && <span className="rounded bg-[#f1ebff] px-1 font-medium text-[#7048e8]">🤖 Bot</span>}{m.direction === "out" && m.sentBy && m.sentBy !== "bot" && userById.has(m.sentBy) && <span className="font-medium">{firstName(userById.get(m.sentBy)!)}</span>}{m.templateName && <span>template</span>}<span>{time}</span>{m.direction === "out" && <Tick status={m.status} error={m.error} />}</>}>
                     {media && (m.type === "image" || m.type === "sticker") && (
                       <a href={media} target="_blank" rel="noreferrer"><img src={media} alt="" className="mb-1 max-h-72 rounded-md" /></a>
                     )}

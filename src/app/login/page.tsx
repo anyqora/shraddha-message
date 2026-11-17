@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
 import { IconBrandWhatsapp } from "@tabler/icons-react";
@@ -40,7 +41,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <input name="email" type="email" required autoComplete="email" className="input h-9" placeholder="you@example.com" />
         </label>
         <label className="block">
-          <span className="label">Password</span>
+          <span className="mb-1 flex items-center justify-between">
+            <span className="label mb-0">Password</span>
+            <Link href="/forgot-password" className="text-xs text-ink-3 hover:text-accent">Forgot password?</Link>
+          </span>
           <input name="password" type="password" required autoComplete="current-password" className="input h-9" />
         </label>
         <button className="btn btn-primary h-9 w-full justify-center">Sign in</button>

@@ -1,20 +1,22 @@
 import "server-only";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "./db";
-import { aiKnowledge, aiUsage, contacts, messages, type AiKnowledge } from "@/db/schema";
+import { aiKnowledge, aiUsage, contacts, mediaFiles, messages, type AiKnowledge, type MessageMedia } from "@/db/schema";
 import { getSettings, type AppSettings } from "./settings";
 import { waClient, errorMessage } from "./whatsapp";
 import { recordOutbound } from "./messaging";
 
 export const HANDOFF_TOKEN = "[HANDOFF]";
 const HANDOFF_TEXT = "Thanks for your patience! I'm connecting you with a member of our team — they'll reply here shortly.";
-const MAX_ENTRIES = 200;
-const INFO_CHAR_BUDGET = 6000;
+const MAX_ENTRIES = 1500;
+const INFO_CHAR_BUDGET = 8000;
 const TOP_QA = 8;
 const HISTORY = 12;
 const TIMEOUT_MS = 25_000;
 
 type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+type ApiMsg = { role: "system" | "user" | "assistant"; content: string | ContentPart[] };
 export type AiUsageInfo = { model: string; promptTokens: number; completionTokens: number };
 
 /* ------------------------------------------------------------ retrieval */
@@ -50,11 +52,13 @@ async function relevantKnowledge(latestText: string) {
   const rows = await db.select().from(aiKnowledge).where(eq(aiKnowledge.active, true)).orderBy(desc(aiKnowledge.updatedAt)).limit(MAX_ENTRIES);
   const qTokens = new Set(tokenize(latestText));
 
-  // business info: most relevant first, within a char budget
+  // business info: hand-written entries always qualify; PDF chunks (source set) only when they match.
+  // Most relevant first, within a char budget.
   const info = rows
     .filter((r) => r.kind === "info")
     .map((r) => ({ r, s: score(r, qTokens) }))
-    .sort((x, y) => y.s - x.s);
+    .filter((x) => !x.r.source || x.s > 0)
+    .sort((x, y) => y.s - x.s || Number(Boolean(x.r.source)) - Number(Boolean(y.r.source)));
   const infoOut: AiKnowledge[] = [];
   let used = 0;
   for (const { r } of info) {
@@ -100,16 +104,17 @@ function buildSystemPrompt(s: AppSettings, k: { info: AiKnowledge[]; qa: AiKnowl
 
 /* ------------------------------------------------------------ LLM call */
 
-async function chatCompletion(s: AppSettings, msgs: ChatMsg[]): Promise<{ text: string; usage: AiUsageInfo }> {
+const baseUrl = (s: AppSettings) => (s.aiBaseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+
+async function chatCompletion(s: AppSettings, msgs: ApiMsg[], maxTokens = 400): Promise<{ text: string; usage: AiUsageInfo }> {
   if (!s.aiApiKey) throw new Error("Add an API key in AI Assistant settings.");
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const base = (s.aiBaseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
-    const res = await fetch(`${base}/chat/completions`, {
+    const res = await fetch(`${baseUrl(s)}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${s.aiApiKey}` },
-      body: JSON.stringify({ model: s.aiModel, messages: msgs, temperature: 0.3, max_tokens: 400 }),
+      body: JSON.stringify({ model: s.aiModel, messages: msgs, temperature: 0.3, max_tokens: maxTokens }),
       signal: ctrl.signal,
       cache: "no-store",
     });
@@ -138,15 +143,120 @@ async function logUsage(contactId: string | null, u: AiUsageInfo) {
 
 const isHandoff = (text: string) => !text || text.toUpperCase().includes(HANDOFF_TOKEN);
 
+/* ------------------------------------------------------------ media (vision / voice) */
+
+const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
+const cleanMime = (m: string) => (m || "").split(";")[0].trim().toLowerCase();
+
+/** Bytes for a media id: our own stored copy first (uploads / web chat / cached), then WhatsApp. */
+async function loadMedia(mediaId: string, mime: string): Promise<{ data: Buffer; mime: string } | null> {
+  const [row] = await db.select().from(mediaFiles).where(eq(mediaFiles.id, mediaId)).limit(1);
+  if (row) return { data: Buffer.from(row.data), mime: cleanMime(row.mime || mime) };
+  if (!/^\d+$/.test(mediaId)) return null;
+  const wa = await waClient();
+  const res = await wa.downloadMedia(mediaId);
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  if (buf.length > MAX_MEDIA_BYTES) return null;
+  return { data: buf, mime: cleanMime(res.headers.get("content-type") || mime) };
+}
+
+async function transcribe(s: AppSettings, data: Buffer, mime: string): Promise<string> {
+  const ext = mime.includes("ogg") ? "ogg" : mime.includes("mpeg") || mime.includes("mp3") ? "mp3" : mime.includes("mp4") || mime.includes("m4a") || mime.includes("aac") ? "m4a" : mime.includes("wav") ? "wav" : mime.includes("webm") ? "webm" : "ogg";
+  const form = new FormData();
+  form.set("model", "whisper-1");
+  form.set("file", new Blob([new Uint8Array(data)], { type: mime || "audio/ogg" }), `voice.${ext}`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60_000);
+  try {
+    const res = await fetch(`${baseUrl(s)}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${s.aiApiKey}` },
+      body: form,
+      signal: ctrl.signal,
+      cache: "no-store",
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok || out?.error) throw new Error(out?.error?.message || `Transcription error (${res.status})`);
+    return String(out?.text ?? "").trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Describe an image (aiVision) or transcribe a voice note / audio (aiTranscribe).
+ * Returns null when the feature is off, the media is unsupported or anything fails.
+ */
+export async function aiDescribeMedia(mediaId: string, mime: string, contactId: string | null = null): Promise<string | null> {
+  const s = await getSettings();
+  if (!s.aiApiKey || !mediaId) return null;
+  const kind = cleanMime(mime);
+  const isImage = kind.startsWith("image/");
+  const isAudio = kind.startsWith("audio/");
+  if (!(isImage && s.aiVision) && !(isAudio && s.aiTranscribe)) return null;
+  try {
+    const m = await loadMedia(mediaId, kind);
+    if (!m || m.data.length > MAX_MEDIA_BYTES) return null;
+    if (isImage) {
+      const imgMime = m.mime.startsWith("image/") ? m.mime : kind;
+      const r = await chatCompletion(
+        s,
+        [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Describe this image in 1-3 short, factual sentences for a customer-support assistant. Transcribe any visible text, prices, product names, order numbers or error messages. No speculation.",
+              },
+              { type: "image_url", image_url: { url: `data:${imgMime};base64,${m.data.toString("base64")}` } },
+            ],
+          },
+        ],
+        200,
+      );
+      await logUsage(contactId, r.usage);
+      return r.text || null;
+    }
+    const t = await transcribe(s, m.data, m.mime.startsWith("audio/") ? m.mime : kind);
+    return t || null;
+  } catch (e) {
+    console.error("[ai] media understanding failed:", errorMessage(e));
+    return null;
+  }
+}
+
+/** Turn a stored message into a context line for the AI ("[Customer sent an image: …]"), or null. */
+export async function buildMediaContext(
+  message: { type: string; body?: string | null; media?: MessageMedia | null; contactId?: string | null },
+): Promise<string | null> {
+  const id = message.media?.id;
+  if (!id) return null;
+  const type = message.type;
+  if (type !== "image" && type !== "audio" && type !== "sticker") return null;
+  const mime = message.media?.mime || (type === "audio" ? "audio/ogg" : "image/jpeg");
+  const d = await aiDescribeMedia(id, mime, message.contactId ?? null);
+  if (!d) return null;
+  return type === "audio" ? `[Customer sent a voice note. Transcript: ${d}]` : `[Customer sent an image: ${d}]`;
+}
+
 /* ------------------------------------------------------------ public API */
 
-/** Auto-reply to a customer. Returns the text sent, or null when the AI did not reply. */
-export async function aiReply(contactId: string, latestText: string): Promise<string | null> {
+/**
+ * Auto-reply to a customer. Returns the text sent, or null when the AI did not reply.
+ * `mediaContext` (e.g. from buildMediaContext) is appended to the latest customer turn; when omitted and the
+ * latest inbound message is an image / voice note without text, it is computed here.
+ * Web-chat contacts (channel 'web') get the reply stored only — nothing is sent on WhatsApp.
+ */
+export async function aiReply(contactId: string, latestText: string, mediaContext?: string | null): Promise<string | null> {
   const s = await getSettings();
-  if (!s.aiEnabled || !s.aiApiKey || !s.waAccessToken) return null;
+  if (!s.aiEnabled || !s.aiApiKey) return null;
 
   const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
   if (!contact || contact.optedOut) return null;
+  const isWeb = contact.channel === "web";
+  if (!isWeb && !s.waAccessToken) return null;
   if (contact.botPausedUntil && contact.botPausedUntil.getTime() > Date.now()) return null;
 
   // per-chat daily cap
@@ -159,12 +269,23 @@ export async function aiReply(contactId: string, latestText: string): Promise<st
 
   const history = (
     await db
-      .select({ direction: messages.direction, body: messages.body, type: messages.type })
+      .select({ direction: messages.direction, body: messages.body, type: messages.type, media: messages.media })
       .from(messages)
       .where(eq(messages.contactId, contactId))
       .orderBy(desc(messages.createdAt))
       .limit(HISTORY)
   ).reverse();
+
+  // vision / voice: the latest inbound media message without text
+  let ctx = mediaContext?.trim() || "";
+  if (!ctx && (s.aiVision || s.aiTranscribe)) {
+    const lastIn = [...history].reverse().find((m) => m.direction === "in");
+    const lastMsg = history[history.length - 1];
+    if (lastIn && lastIn === lastMsg && (lastIn.type === "image" || lastIn.type === "audio") && lastIn.media?.id && !lastIn.body.trim()) {
+      ctx = (await buildMediaContext({ type: lastIn.type, body: lastIn.body, media: lastIn.media, contactId })) ?? "";
+    }
+  }
+
   const chat: ChatMsg[] = history
     .map((m): ChatMsg => ({ role: m.direction === "in" ? "user" : "assistant", content: m.body.trim() || `[${m.type}]` }))
     .filter((m) => m.content);
@@ -172,11 +293,16 @@ export async function aiReply(contactId: string, latestText: string): Promise<st
   if (latestText.trim() && !(last?.role === "user" && last.content === latestText.trim())) {
     chat.push({ role: "user", content: latestText.trim() });
   }
+  if (ctx) {
+    const tail = chat[chat.length - 1];
+    if (tail?.role === "user") tail.content = /^\[[a-z]+\]$/.test(tail.content) ? ctx : `${tail.content}\n\n${ctx}`;
+    else chat.push({ role: "user", content: ctx });
+  }
   if (!chat.length) return null;
 
   let text: string;
   try {
-    const k = await relevantKnowledge(latestText);
+    const k = await relevantKnowledge(`${latestText} ${ctx}`);
     const r = await chatCompletion(s, [{ role: "system", content: buildSystemPrompt(s, k) }, ...chat]);
     await logUsage(contactId, r.usage);
     text = r.text;
@@ -190,13 +316,16 @@ export async function aiReply(contactId: string, latestText: string): Promise<st
 
   let wamid: string | null = null;
   let error = "";
-  try {
-    const wa = await waClient(s);
-    wamid = await wa.sendText(contact.phone, out);
-  } catch (e) {
-    error = errorMessage(e);
+  if (!isWeb) {
+    try {
+      const wa = await waClient(s);
+      wamid = await wa.sendText(contact.phone, out);
+    } catch (e) {
+      error = errorMessage(e);
+    }
   }
-  await recordOutbound({ contactId, type: "text", body: out, wamid, status: wamid ? "sent" : "failed", error, sentBy: "ai" });
+  const ok = isWeb || Boolean(wamid);
+  await recordOutbound({ contactId, type: "text", body: out, wamid, status: ok ? "sent" : "failed", error, sentBy: "ai" });
 
   if (handoff) {
     await db
@@ -204,7 +333,7 @@ export async function aiReply(contactId: string, latestText: string): Promise<st
       .set({ botPausedUntil: new Date(Date.now() + s.botPauseHours * 3600 * 1000) })
       .where(eq(contacts.id, contactId));
   }
-  return wamid ? out : null;
+  return ok ? out : null;
 }
 
 /** Playground: same prompt building, no WhatsApp send. */

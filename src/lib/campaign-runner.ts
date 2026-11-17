@@ -7,6 +7,7 @@ import { waClient, errorMessage } from "./whatsapp";
 import { buildSendComponents, renderTemplatePreview } from "./template-utils";
 import { recordOutbound } from "./messaging";
 import { sleep } from "./utils";
+import { emit } from "./events";
 
 /**
  * Sends pending campaign messages with throttling.
@@ -59,6 +60,7 @@ export async function runCampaigns(budgetMs = 50_000): Promise<{ sent: number; f
           .limit(25);
         if (!batch.length) {
           await db.update(campaigns).set({ status: "completed", completedAt: new Date() }).where(eq(campaigns.id, c.id));
+          await emit({ name: "campaign.completed", campaignId: c.id });
           break;
         }
         // stop if the campaign was paused meanwhile

@@ -20,6 +20,9 @@ import { requireUser } from "@/lib/auth";
 import { campaignStats, summarize } from "@/lib/campaign-runner";
 import { formatDateTime, timeAgo } from "@/lib/utils";
 import { formatPhone } from "@/lib/phone";
+import { loadDashboardExtras } from "@/lib/dashboard-extra";
+import { SetupChecklist, ShareBar, BusyHeatmap } from "@/components/dashboard-cards";
+import { IconChecklist, IconTargetArrow, IconRobot, IconFlame, IconSun } from "@tabler/icons-react";
 
 const DAYS = 14;
 const IST = sql`interval 330 minute`;
@@ -144,7 +147,8 @@ export default async function Dashboard() {
   }
   const cur = summarize(agg.cur);
   const prev = summarize(agg.prev);
-  const stats = await campaignStats(recent.map((r) => r.id));
+  const [stats, x] = await Promise.all([campaignStats(recent.map((r) => r.id)), loadDashboardExtras(s, user.id)]);
+  const inr = (v: number) => `₹${v.toLocaleString("en-IN")}`;
   const hour = Number(new Date(now + 330 * 60e3).toISOString().slice(11, 13));
   const greet = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const connected = Boolean(s.waAccessToken && s.waPhoneNumberId);
@@ -165,6 +169,8 @@ export default async function Dashboard() {
             <Link href="/templates/new" className="btn"><IconTemplate size={14} /> New template</Link>
           </div>
         </div>
+
+        <SetupChecklist steps={x.setup} />
 
         {!connected && (
           <Notice tone="warn">
@@ -206,6 +212,64 @@ export default async function Dashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 font-medium"><IconSun size={15} className="text-ink-3" /> Today</h3>
+              <Link href="/tasks" className="text-xs text-accent">All tasks</Link>
+            </div>
+            <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-md bg-soft py-2"><div className="text-lg font-semibold">{x.today.inbound}</div><div className="text-[11px] text-ink-3">Received</div></div>
+              <div className="rounded-md bg-soft py-2"><div className="text-lg font-semibold">{x.today.outbound}</div><div className="text-[11px] text-ink-3">Sent</div></div>
+              <div className="rounded-md bg-soft py-2"><div className="text-lg font-semibold">{x.today.newContacts}</div><div className="text-[11px] text-ink-3">New contacts</div></div>
+            </div>
+            <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-ink-3"><IconChecklist size={13} /> Tasks due</div>
+            <ul className="space-y-1">
+              {x.dueTasks.map((t) => (
+                <li key={t.id} className="flex items-center gap-2 text-sm">
+                  <span className={`size-1.5 shrink-0 rounded-full ${t.overdue ? "bg-danger" : "bg-[#eda100]"}`} />
+                  <span className="flex-1 truncate">{t.title}</span>
+                  {t.contactId && <Link href={`/contacts/${t.contactId}`} className="max-w-24 truncate text-xs text-ink-3 hover:text-accent">{t.contactName || formatPhone(t.contactPhone)}</Link>}
+                  <span className={`text-[11px] ${t.overdue ? "text-danger" : "text-ink-3"}`}>{t.overdue ? "Overdue" : "Today"}</span>
+                </li>
+              ))}
+              {!x.dueTasks.length && <li className="text-sm text-ink-3">Nothing due — nice work 🎉</li>}
+            </ul>
+          </div>
+          <div className="card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 font-medium"><IconTargetArrow size={15} className="text-ink-3" /> Sales pipeline</h3>
+              <Link href="/deals" className="text-xs text-accent">Open deals</Link>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="text-xs text-ink-3">Open pipeline · {x.pipeline.openCount} deals</div>
+                <div className="text-2xl font-semibold tracking-tight">{inr(x.pipeline.openValue)}</div>
+              </div>
+              <div className="border-t border-line pt-3">
+                <div className="text-xs text-ink-3">Won this month</div>
+                <div className="text-xl font-semibold text-success">{inr(x.pipeline.wonMonth)}</div>
+              </div>
+              <Link href="/deals/new" className="btn w-full justify-center"><IconPlus size={14} /> New deal</Link>
+            </div>
+          </div>
+          <div className="card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 font-medium"><IconRobot size={15} className="text-ink-3" /> Who replied · 7d</h3>
+              <Link href="/chatbot" className="text-xs text-accent">Chatbot</Link>
+            </div>
+            <ShareBar rows={x.share} />
+          </div>
+        </div>
+
+        <div className="card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="flex items-center gap-1.5 font-medium"><IconFlame size={15} className="text-ink-3" /> When customers message you</h3>
+            <span className="text-xs text-ink-3">Last 30 days · IST</span>
+          </div>
+          <BusyHeatmap grid={x.heat} />
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2">

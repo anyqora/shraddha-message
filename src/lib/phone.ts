@@ -10,6 +10,7 @@ export function normalizePhone(input: string, defaultCc = "91"): string {
 }
 
 export function formatPhone(d: string): string {
+  if (d.startsWith("w")) return "Web visitor";
   if (d.startsWith("91") && d.length === 12) return `+91 ${d.slice(2, 7)} ${d.slice(7)}`;
   return d ? `+${d}` : "";
 }

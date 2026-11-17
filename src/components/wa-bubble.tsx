@@ -28,6 +28,8 @@ export function WaBubble({
   footer,
   buttons,
   meta,
+  reaction,
+  actions,
   children,
 }: {
   out?: boolean;
@@ -36,10 +38,14 @@ export function WaBubble({
   footer?: string;
   buttons?: string[];
   meta?: React.ReactNode;
+  /** emoji reaction shown as a small pill under the bubble */
+  reaction?: string;
+  /** hover-only controls (e.g. reaction picker), shown beside the bubble */
+  actions?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("max-w-[85%] rounded-lg px-2.5 py-1.5 text-[13.5px] leading-[19px] text-[#111b21] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]", out ? "ml-auto bg-[#d9fdd3]" : "bg-white")}>
+    <div className={cn("group/bubble relative max-w-[85%] rounded-lg px-2.5 py-1.5 text-[13.5px] leading-[19px] text-[#111b21] shadow-[0_1px_0.5px_rgba(11,20,26,.13)]", out ? "ml-auto bg-[#d9fdd3]" : "bg-white", reaction && "mb-3.5")}>
       {children}
       {header && <div className="mb-1 font-semibold">{header}</div>}
       {body && <div className="whitespace-pre-wrap break-words"><WaText text={body} /></div>}
@@ -48,6 +54,16 @@ export function WaBubble({
       {buttons && buttons.length > 0 && (
         <div className="-mx-2.5 mt-1.5 border-t border-black/5">
           {buttons.map((b, i) => <div key={i} className="border-b border-black/5 py-1.5 text-center text-[#027eb5] last:border-0">{b}</div>)}
+        </div>
+      )}
+      {reaction && (
+        <span className={cn("absolute -bottom-3.5 flex h-[22px] items-center rounded-full border border-black/5 bg-white px-1.5 text-[13px] leading-none shadow-sm", out ? "right-2" : "left-2")}>
+          {reaction}
+        </span>
+      )}
+      {actions && (
+        <div className={cn("absolute top-1 opacity-0 transition-opacity group-hover/bubble:opacity-100 focus-within:opacity-100", out ? "right-full mr-1" : "left-full ml-1")}>
+          {actions}
         </div>
       )}
     </div>

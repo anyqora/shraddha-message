@@ -79,6 +79,8 @@ export const contacts = mysqlTable(
     chatStatus: mysqlEnum("chat_status", ["open", "closed"]).notNull().default("open"),
     channel: mysqlEnum("channel", ["whatsapp", "web"]).notNull().default("whatsapp"),
     webVisitorId: varchar("web_visitor_id", { length: 64 }),
+    birthday: varchar("birthday", { length: 5 }), // MM-DD
+    anniversary: varchar("anniversary", { length: 5 }), // MM-DD
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -505,6 +507,131 @@ export const webhookEndpoints = mysqlTable("webhook_endpoints", {
   createdAt: createdAt(),
 });
 
+/* ------------------------------------------------- catalog & payments */
+
+export const products = mysqlTable("products", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  sku: varchar("sku", { length: 64 }).notNull().default(""),
+  description: text("description").notNull(),
+  price: int("price").notNull().default(0), // paise
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  imageId: varchar("image_id", { length: 128 }), // mediaFiles.id
+  category: varchar("category", { length: 191 }).notNull().default(""),
+  url: varchar("url", { length: 500 }).notNull().default(""),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const paymentLinks = mysqlTable(
+  "payment_links",
+  {
+    id: uuid().primaryKey(),
+    contactId: varchar("contact_id", { length: 36 }),
+    provider: mysqlEnum("provider", ["razorpay", "upi"]).notNull(),
+    providerId: varchar("provider_id", { length: 64 }),
+    amount: int("amount").notNull(), // paise
+    currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+    description: varchar("description", { length: 255 }).notNull().default(""),
+    url: varchar("url", { length: 500 }).notNull(),
+    status: mysqlEnum("status", ["created", "paid", "expired", "cancelled", "failed"]).notNull().default("created"),
+    paidAt: datetime("paid_at", { mode: "date" }),
+    createdBy: varchar("created_by", { length: 36 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("payment_links_contact_idx").on(t.contactId), index("payment_links_provider_idx").on(t.providerId)],
+);
+
+/* ------------------------------------------------------- drips & dates */
+
+export type DripStep = { delayHours: number; kind: "text" | "template"; text?: string; templateId?: string; body?: string[] };
+
+export const dripSequences = mysqlTable("drip_sequences", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  // auto-enroll contacts added to this list (optional)
+  listId: varchar("list_id", { length: 36 }),
+  steps: json("steps").$type<DripStep[]>().notNull().default([]),
+  stopOnReply: boolean("stop_on_reply").notNull().default(true),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const dripEnrollments = mysqlTable(
+  "drip_enrollments",
+  {
+    id: uuid().primaryKey(),
+    sequenceId: varchar("sequence_id", { length: 36 }).notNull(),
+    contactId: varchar("contact_id", { length: 36 }).notNull(),
+    stepIndex: int("step_index").notNull().default(0),
+    nextAt: datetime("next_at", { mode: "date" }),
+    status: mysqlEnum("status", ["active", "completed", "stopped", "failed"]).notNull().default("active"),
+    error: varchar("error", { length: 500 }).notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex("drip_enroll_uq").on(t.sequenceId, t.contactId), index("drip_enroll_due_idx").on(t.status, t.nextAt)],
+);
+
+export const dateWishes = mysqlTable("date_wishes", {
+  id: uuid().primaryKey(),
+  kind: mysqlEnum("kind", ["birthday", "anniversary"]).notNull(),
+  templateId: varchar("template_id", { length: 36 }),
+  body: json("body").$type<string[]>().notNull().default([]),
+  sendHour: int("send_hour").notNull().default(9), // IST
+  active: boolean("active").notNull().default(true),
+  lastRunDate: varchar("last_run_date", { length: 10 }), // YYYY-MM-DD (IST)
+  createdAt: createdAt(),
+});
+
+/* ---------------------------------------------- growth: links, segments */
+
+export const waLinks = mysqlTable("wa_links", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  message: varchar("message", { length: 500 }).notNull().default(""),
+  listId: varchar("list_id", { length: 36 }), // tag people who start chatting from this link (by matching the prefilled text)
+  clicks: int("clicks").notNull().default(0),
+  createdAt: createdAt(),
+});
+
+export type SegmentRule = { field: string; op: string; value?: string };
+
+export const segments = mysqlTable("segments", {
+  id: uuid().primaryKey(),
+  name: varchar("name", { length: 191 }).notNull(),
+  match: mysqlEnum("match", ["all", "any"]).notNull().default("all"),
+  rules: json("rules").$type<SegmentRule[]>().notNull().default([]),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/* --------------------------------------------------------- audit log */
+
+export const auditLog = mysqlTable(
+  "audit_log",
+  {
+    id: uuid().primaryKey(),
+    userId: varchar("user_id", { length: 36 }),
+    action: varchar("action", { length: 64 }).notNull(),
+    entity: varchar("entity", { length: 64 }).notNull().default(""),
+    entityId: varchar("entity_id", { length: 64 }).notNull().default(""),
+    summary: varchar("summary", { length: 500 }).notNull().default(""),
+    ip: varchar("ip", { length: 64 }).notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [index("audit_created_idx").on(t.createdAt), index("audit_entity_idx").on(t.entity, t.entityId)],
+);
+
+export type Product = typeof products.$inferSelect;
+export type PaymentLink = typeof paymentLinks.$inferSelect;
+export type DripSequence = typeof dripSequences.$inferSelect;
+export type Segment = typeof segments.$inferSelect;
+export type WaLink = typeof waLinks.$inferSelect;
 export type Automation = typeof automations.$inferSelect;
 export type AutomationRun = typeof automationRuns.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;

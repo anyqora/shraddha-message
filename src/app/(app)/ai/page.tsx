@@ -1,5 +1,5 @@
-import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { IconCheck, IconPencil, IconSparkles, IconTrash, IconUpload } from "@tabler/icons-react";
+import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
+import { IconCheck, IconFileTypePdf, IconPencil, IconSparkles, IconTrash, IconUpload } from "@tabler/icons-react";
 import { db } from "@/lib/db";
 import { aiKnowledge, aiUsage, messages } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
@@ -11,6 +11,9 @@ import { timeAgo } from "@/lib/utils";
 import {
   addKnowledge,
   deleteKnowledge,
+  deleteKnowledgeSource,
+  toggleKnowledgeSource,
+  uploadKnowledgePdf,
   importKnowledgeCsv,
   runPlayground,
   saveAiSettings,
@@ -21,21 +24,34 @@ import {
 const ERR: Record<string, string> = {
   entry: "A Q&A entry needs a question and an answer; business info needs some text.",
   csv: "Choose a CSV file with question,answer columns.",
+  pdf: "Choose one or more PDF files (up to 10 MB each).",
 };
 
 export default async function AiPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; edit?: string; imported?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; edit?: string; imported?: string; pdfChunks?: string; pdfFailed?: string }>;
 }) {
   const sp = await searchParams;
   const me = await requireUser();
   const isAdmin = me.role === "admin";
   const since = new Date(Date.now() - 30 * 24 * 3600 * 1000);
 
-  const [s, entries, byModel, [replies]] = await Promise.all([
+  const [s, entries, sources, byModel, [replies]] = await Promise.all([
     getSettings(),
-    db.select().from(aiKnowledge).orderBy(desc(aiKnowledge.createdAt)).limit(500),
+    db.select().from(aiKnowledge).where(eq(aiKnowledge.source, "")).orderBy(desc(aiKnowledge.createdAt)).limit(500),
+    db
+      .select({
+        source: aiKnowledge.source,
+        chunks: sql<number>`count(*)`,
+        active: sql<number>`coalesce(sum(${aiKnowledge.active}), 0)`,
+        chars: sql<number>`coalesce(sum(char_length(${aiKnowledge.answer})), 0)`,
+        added: sql<Date>`max(${aiKnowledge.createdAt})`,
+      })
+      .from(aiKnowledge)
+      .where(ne(aiKnowledge.source, ""))
+      .groupBy(aiKnowledge.source)
+      .orderBy(desc(sql`max(${aiKnowledge.createdAt})`)),
     db
       .select({
         model: aiUsage.model,
@@ -62,6 +78,8 @@ export default async function AiPage({
       <div className="mx-auto max-w-4xl space-y-6">
         {sp.saved && <Notice tone="success">Saved.</Notice>}
         {sp.imported && <Notice tone="success">Imported {sp.imported} Q&A entries.</Notice>}
+        {sp.pdfChunks !== undefined && Number(sp.pdfChunks) > 0 && <Notice tone="success">Added {sp.pdfChunks} knowledge chunks from PDF.</Notice>}
+        {sp.pdfFailed && <Notice tone="warn">Could not read: {sp.pdfFailed}. Scanned (image-only) PDFs have no text to extract, and files must be PDFs up to 10 MB.</Notice>}
         {sp.error && <Notice tone="error">{ERR[sp.error] ?? "Something went wrong."}</Notice>}
         <Notice>
           The AI answers only when no chatbot rule matched (it replaces the fallback rule while enabled), using the knowledge base below. If it is unsure or the
@@ -99,6 +117,22 @@ export default async function AiPage({
             <Field label="Max AI replies per chat / day">
               <input name="aiMaxRepliesPerChat" type="number" min={1} max={500} defaultValue={s.aiMaxRepliesPerChat} className="input" disabled={!isAdmin} />
             </Field>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="aiVision" defaultChecked={s.aiVision} disabled={!isAdmin} className="mt-0.5" />
+                <span>
+                  <span className="font-medium">Understand images</span>
+                  <span className="block text-xs text-ink-3">Photos customers send are described by the model (needs a vision model, e.g. gpt-4o-mini) before replying.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" name="aiTranscribe" defaultChecked={s.aiTranscribe} disabled={!isAdmin} className="mt-0.5" />
+                <span>
+                  <span className="font-medium">Transcribe voice notes</span>
+                  <span className="block text-xs text-ink-3">Audio is sent to the provider&apos;s /audio/transcriptions endpoint with model whisper-1 (OpenAI, Groq…; not available on OpenRouter).</span>
+                </span>
+              </label>
+            </div>
             <div className="flex items-end">{isAdmin && <button className="btn btn-primary">Save</button>}</div>
           </form>
         </section>
@@ -118,6 +152,7 @@ export default async function AiPage({
             </form>
           </div>
           {entries.length ? (
+            <div className="overflow-x-auto">
             <table className="table-grid w-full">
               <thead>
                 <tr>
@@ -174,6 +209,7 @@ export default async function AiPage({
                 )}
               </tbody>
             </table>
+            </div>
           ) : (
             <Empty icon={<IconSparkles />} title="No knowledge yet" hint="Add common questions with answers, plus business info like timings, address and policies." />
           )}
@@ -186,6 +222,65 @@ export default async function AiPage({
             <textarea name="answer" rows={2} required placeholder="Answer / information" className="input h-auto py-1.5" />
             <div><button className="btn btn-primary">Add</button></div>
           </form>
+        </section>
+
+        {/* ---------------------------------------------------- PDF documents */}
+        <section className="card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+            <div>
+              <div className="font-semibold">Documents (PDF)</div>
+              <div className="text-xs text-ink-3">
+                Upload brochures, price lists or policies. Text is split into ~1,500-character chunks; only the chunks that match the customer&apos;s message are given to the AI.
+              </div>
+            </div>
+            <form action={uploadKnowledgePdf} className="flex items-center gap-2">
+              <input type="file" name="files" accept=".pdf,application/pdf" multiple required className="max-w-48 text-xs" />
+              <button className="btn"><IconUpload size={14} /> Upload PDF</button>
+            </form>
+          </div>
+          {sources.length ? (
+            <div className="overflow-x-auto">
+              <table className="table-grid w-full">
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th className="w-24">Chunks</th>
+                    <th className="w-24">Characters</th>
+                    <th className="w-20">Active</th>
+                    <th className="w-24">Added</th>
+                    <th className="w-12"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.map((d) => {
+                    const on = Number(d.active) > 0;
+                    return (
+                      <tr key={d.source} className={on ? "" : "opacity-50"}>
+                        <td className="max-w-80 truncate" title={d.source}>
+                          <span className="flex items-center gap-1.5"><IconFileTypePdf size={14} className="shrink-0 text-danger" /> {d.source}</span>
+                        </td>
+                        <td>{fmt(Number(d.chunks))}</td>
+                        <td className="text-ink-3">{fmt(Number(d.chars))}</td>
+                        <td>
+                          <form action={toggleKnowledgeSource.bind(null, d.source, !on)}>
+                            <button className="text-xs"><Chip color={on ? "green" : "gray"}>{on ? "Active" : "Off"}</Chip></button>
+                          </form>
+                        </td>
+                        <td className="text-ink-3">{d.added ? timeAgo(new Date(d.added)) : "—"}</td>
+                        <td>
+                          <form action={deleteKnowledgeSource.bind(null, d.source)}>
+                            <button className="rounded-sm p-1 text-ink-3 hover:text-danger" title="Delete document"><IconTrash size={14} /></button>
+                          </form>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-4 py-6 text-center text-sm text-ink-3">No documents yet. Text-based PDFs up to 10 MB each.</div>
+          )}
         </section>
 
         {/* ---------------------------------------------------- playground */}

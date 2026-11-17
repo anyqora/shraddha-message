@@ -2,8 +2,10 @@ import "server-only";
 import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { contacts, messages, type MessageMedia } from "@/db/schema";
-import { applyStatus, previewOf, upsertContactByPhone } from "./messaging";
+import { applyStatus, contactIdByWamid, previewOf, setReactionByWamid, upsertContactByPhoneEx } from "./messaging";
 import { runChatbot } from "./chatbot";
+import { emit } from "./events";
+import { fetchAndStoreWaMedia } from "./media-store";
 
 const OPT_OUT = /^(stop|unsubscribe|stop all|opt ?out|cancel)$/i;
 const OPT_IN = /^(start|subscribe|unstop|opt ?in)$/i;
@@ -52,8 +54,6 @@ function extract(m: WaMessage): { body: string; media: MessageMedia | null } {
       return { body: m.button?.text ?? "", media: null };
     case "interactive":
       return { body: m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? "", media: null };
-    case "reaction":
-      return { body: `Reacted ${m.reaction?.emoji ?? ""}`, media: null };
     case "contacts":
       return {
         body: (m.contacts ?? []).map((c) => `👤 ${c.name?.formatted_name ?? ""} ${c.phones?.[0]?.phone ?? ""}`).join("\n"),
@@ -72,7 +72,10 @@ export async function handleWebhook(payload: any) {
 
       for (const st of v.statuses ?? []) {
         const err = (st.errors ?? []).map((e: any) => e.error_data?.details || e.title || e.message).filter(Boolean).join("; ");
-        await applyStatus(String(st.id), String(st.status), err);
+        const wamid = String(st.id);
+        const status = String(st.status);
+        await applyStatus(wamid, status, err);
+        await emit({ name: "message.status", contactId: await contactIdByWamid(wamid).catch(() => null), wamid, status, error: err });
       }
 
       const names = new Map<string, string>();
@@ -80,7 +83,15 @@ export async function handleWebhook(payload: any) {
 
       for (const m of (v.messages ?? []) as WaMessage[]) {
         const phone = String(m.from).replace(/\D/g, "");
-        const contactId = await upsertContactByPhone(phone, names.get(m.from));
+        const { id: contactId, created } = await upsertContactByPhoneEx(phone, names.get(m.from));
+        if (created) await emit({ name: "contact.created", contactId });
+
+        // Reactions don't become chat bubbles: attach them to the message they react to.
+        if (m.type === "reaction") {
+          if (m.reaction?.message_id) await setReactionByWamid(m.reaction.message_id, m.reaction.emoji ?? "");
+          continue;
+        }
+
         const [before] = await db.select({ lastInboundAt: contacts.lastInboundAt }).from(contacts).where(eq(contacts.id, contactId)).limit(1);
         const { body, media } = extract(m);
         const at = new Date(Number(m.timestamp) * 1000 || Date.now());
@@ -105,6 +116,16 @@ export async function handleWebhook(payload: any) {
         await db.update(contacts).set(patch).where(eq(contacts.id, contactId));
         if (!OPT_OUT.test(text)) {
           await runChatbot(contactId, text, replyIdOf(m), before?.lastInboundAt ?? null).catch((e) => console.error("chatbot error", e));
+        }
+
+        const [stored] = await db.select({ id: messages.id }).from(messages).where(eq(messages.wamid, m.id)).limit(1);
+        if (stored) await emit({ name: "message.received", contactId, messageId: stored.id, text: body, type: m.type });
+
+        // Meta media URLs expire — keep a permanent copy (size-capped by settings).
+        if (media?.id) {
+          await fetchAndStoreWaMedia(media.id, media.mime ?? "", media.filename ?? "").catch((e) =>
+            console.error("media store error", e),
+          );
         }
       }
     }

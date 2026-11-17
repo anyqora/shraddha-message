@@ -35,9 +35,16 @@ export type AppSettings = {
   widgetGreeting: string;
   widgetColor: string;
   mediaStoreMaxMb: number;
+  razorpayKeyId: string;
+  razorpayKeySecret: string; // decrypted
+  razorpayWebhookSecret: string; // decrypted
+  upiId: string;
+  upiName: string;
+  sheetsWebhookUrl: string;
+  sheetsEvents: string; // comma separated event names
 };
 
-const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret", "aiApiKey", "smtpPass"]);
+const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret", "aiApiKey", "smtpPass", "razorpayKeySecret", "razorpayWebhookSecret"]);
 const DEFAULTS: AppSettings = {
   waPhoneNumberId: "",
   waBusinessAccountId: "",
@@ -69,6 +76,13 @@ const DEFAULTS: AppSettings = {
   widgetGreeting: "Hi! How can we help you?",
   widgetColor: "#1961ed",
   mediaStoreMaxMb: 16,
+  razorpayKeyId: "",
+  razorpayKeySecret: "",
+  razorpayWebhookSecret: "",
+  upiId: "",
+  upiName: "",
+  sheetsWebhookUrl: "",
+  sheetsEvents: "contact.created,message.received",
 };
 
 export async function getSettings(): Promise<AppSettings> {

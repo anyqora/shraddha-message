@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { extractText, getDocumentProxy } from "unpdf";
 import { db } from "@/lib/db";
 import { aiKnowledge } from "@/db/schema";
 import { requireAdmin, requireUser } from "@/lib/auth";
@@ -22,6 +23,8 @@ export async function saveAiSettings(fd: FormData) {
     aiModel: str(fd, "aiModel") || "gpt-4o-mini",
     aiSystemPrompt: str(fd, "aiSystemPrompt"),
     aiMaxRepliesPerChat: Math.min(500, Math.max(1, Number(str(fd, "aiMaxRepliesPerChat")) || 20)),
+    aiVision: fd.get("aiVision") === "on",
+    aiTranscribe: fd.get("aiTranscribe") === "on",
   };
   if (str(fd, "aiApiKey")) patch.aiApiKey = str(fd, "aiApiKey");
   await saveSettings(patch);
@@ -115,4 +118,103 @@ export async function runPlayground(
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/* ------------------------------------------------------------ PDF knowledge */
+
+const PDF_MAX_BYTES = 10 * 1024 * 1024;
+const CHUNK = 1500;
+
+/** Split text into ~CHUNK-char pieces on paragraph (then sentence / word) boundaries. */
+function chunkText(text: string): string[] {
+  const paras = text
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s*\n\s*/g, " ").replace(/\s{2,}/g, " ").trim())
+    .filter(Boolean);
+  // break oversized paragraphs into sentence/word pieces
+  const pieces: string[] = [];
+  for (const p of paras) {
+    if (p.length <= CHUNK) {
+      pieces.push(p);
+      continue;
+    }
+    let rest = p;
+    while (rest.length > CHUNK) {
+      let cut = rest.lastIndexOf(". ", CHUNK);
+      if (cut < CHUNK * 0.5) cut = rest.lastIndexOf(" ", CHUNK);
+      if (cut < CHUNK * 0.5) cut = CHUNK;
+      pieces.push(rest.slice(0, cut + 1).trim());
+      rest = rest.slice(cut + 1).trim();
+    }
+    if (rest) pieces.push(rest);
+  }
+  const chunks: string[] = [];
+  let cur = "";
+  for (const p of pieces) {
+    if (cur && cur.length + p.length + 2 > CHUNK) {
+      chunks.push(cur);
+      cur = p;
+    } else cur = cur ? `${cur}\n\n${p}` : p;
+  }
+  if (cur) chunks.push(cur);
+  return chunks.filter((c) => c.trim().length >= 20);
+}
+
+export async function uploadKnowledgePdf(fd: FormData) {
+  await requireUser();
+  const files = fd.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) redirect("/ai?error=pdf");
+  let added = 0;
+  const failed: string[] = [];
+  for (const f of files) {
+    const name = (f.name || "document.pdf").slice(0, 255);
+    if (f.size > PDF_MAX_BYTES || !(f.type === "application/pdf" || /\.pdf$/i.test(name))) {
+      failed.push(name);
+      continue;
+    }
+    try {
+      const pdf = await getDocumentProxy(new Uint8Array(await f.arrayBuffer()));
+      const { text } = await extractText(pdf, { mergePages: false });
+      const chunks = chunkText(text.join("\n\n"));
+      if (!chunks.length) {
+        failed.push(name);
+        continue;
+      }
+      // replace an earlier upload of the same file
+      await db.delete(aiKnowledge).where(and(eq(aiKnowledge.kind, "info"), eq(aiKnowledge.source, name)));
+      const title = name.replace(/\.pdf$/i, "");
+      const values = chunks.map((c, i) => ({
+        kind: "info" as const,
+        question: `${title}${chunks.length > 1 ? ` (part ${i + 1}/${chunks.length})` : ""}`.slice(0, 500),
+        answer: c,
+        source: name,
+        active: true,
+      }));
+      for (let i = 0; i < values.length; i += 100) await db.insert(aiKnowledge).values(values.slice(i, i + 100));
+      added += values.length;
+    } catch (e) {
+      console.error("[ai] pdf import failed:", name, e);
+      failed.push(name);
+    }
+  }
+  revalidatePath("/ai");
+  const q = new URLSearchParams({ pdfChunks: String(added) });
+  if (failed.length) q.set("pdfFailed", failed.join(", ").slice(0, 300));
+  redirect(`/ai?${q}`);
+}
+
+export async function deleteKnowledgeSource(source: string) {
+  await requireUser();
+  if (!source) return;
+  await db.delete(aiKnowledge).where(eq(aiKnowledge.source, source));
+  revalidatePath("/ai");
+}
+
+export async function toggleKnowledgeSource(source: string, active: boolean) {
+  await requireUser();
+  if (!source) return;
+  await db.update(aiKnowledge).set({ active }).where(eq(aiKnowledge.source, source));
+  revalidatePath("/ai");
 }

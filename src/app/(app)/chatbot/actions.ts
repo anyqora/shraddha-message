@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { eq, ne } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { botRules, type BotOption } from "@/db/schema";
+import { botRules, type BotOption, type BotRule } from "@/db/schema";
 import { requireUser } from "@/lib/auth";
 import { saveSettings } from "@/lib/settings";
 import { validateRule, type RuleInput } from "./validate";
@@ -51,8 +51,7 @@ function parseRule(fd: FormData): RuleInput {
   };
 }
 
-export async function saveRule(id: string | null, _: unknown, fd: FormData): Promise<Result> {
-  await requireUser();
+async function persistRule(id: string | null, fd: FormData): Promise<{ ok: false; message: string } | { ok: true; id: string }> {
   const r = parseRule(fd);
   const errors = validateRule(r);
   if (errors.length) return { ok: false, message: errors.join(" ") };
@@ -62,14 +61,81 @@ export async function saveRule(id: string | null, _: unknown, fd: FormData): Pro
   try {
     if (id) {
       await db.update(botRules).set(r).where(eq(botRules.id, id));
-    } else {
-      await db.insert(botRules).values(r);
+      return { ok: true, id };
     }
+    const newId = crypto.randomUUID();
+    await db.insert(botRules).values({ id: newId, ...r });
+    return { ok: true, id: newId };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Could not save the rule." };
   }
+}
+
+export async function saveRule(id: string | null, _: unknown, fd: FormData): Promise<Result> {
+  await requireUser();
+  const res = await persistRule(id, fd);
+  if (!res.ok) return res;
   revalidatePath("/chatbot");
+  revalidatePath("/chatbot/flow");
   redirect("/chatbot");
+}
+
+/* ---------------------------------------------------------- flow canvas */
+
+type FlowResult = { ok: boolean; message: string; rule?: BotRule } | null;
+
+/** Same as saveRule but stays on the page and returns the saved rule (used by the flow drawer). */
+export async function saveRuleInline(id: string, _: unknown, fd: FormData): Promise<FlowResult> {
+  await requireUser();
+  const res = await persistRule(id, fd);
+  if (!res.ok) return res;
+  const [rule] = await db.select().from(botRules).where(eq(botRules.id, res.id)).limit(1);
+  revalidatePath("/chatbot");
+  return { ok: true, message: "Saved.", rule };
+}
+
+export async function saveNodePositions(updates: { id: string; x: number; y: number }[]): Promise<void> {
+  await requireUser();
+  for (const u of updates.slice(0, 500)) {
+    if (typeof u?.id !== "string" || !Number.isFinite(u.x) || !Number.isFinite(u.y)) continue;
+    const clamp = (n: number) => Math.max(-1_000_000, Math.min(1_000_000, Math.round(n)));
+    await db.update(botRules).set({ posX: clamp(u.x), posY: clamp(u.y) }).where(eq(botRules.id, u.id));
+  }
+}
+
+export async function linkOption(ruleId: string, optionIndex: number, nextRuleId: string | null): Promise<{ ok: boolean; message?: string; options?: BotOption[] }> {
+  await requireUser();
+  const [rule] = await db.select().from(botRules).where(eq(botRules.id, ruleId)).limit(1);
+  if (!rule) return { ok: false, message: "Step not found." };
+  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= rule.options.length) return { ok: false, message: "Option not found." };
+  if (nextRuleId) {
+    if (nextRuleId === ruleId) return { ok: false, message: "An option can’t point to its own step." };
+    const [target] = await db.select({ id: botRules.id }).from(botRules).where(eq(botRules.id, nextRuleId)).limit(1);
+    if (!target) return { ok: false, message: "Target step not found." };
+  }
+  const options = rule.options.map((o, i) => (i === optionIndex ? { ...o, next: nextRuleId } : o));
+  await db.update(botRules).set({ options }).where(eq(botRules.id, ruleId));
+  revalidatePath("/chatbot");
+  return { ok: true, options };
+}
+
+/** Creates a blank "menu" step at a canvas position and returns it. */
+export async function createFlowStep(x: number, y: number): Promise<BotRule> {
+  await requireUser();
+  const id = crypto.randomUUID();
+  await db.insert(botRules).values({
+    id,
+    name: "New step",
+    trigger: "menu",
+    replyType: "text",
+    body: "New step",
+    priority: 50,
+    posX: Math.round(Number.isFinite(x) ? x : 0),
+    posY: Math.round(Number.isFinite(y) ? y : 0),
+  });
+  const [rule] = await db.select().from(botRules).where(eq(botRules.id, id)).limit(1);
+  revalidatePath("/chatbot");
+  return rule;
 }
 
 export async function deleteRule(id: string) {
@@ -86,6 +152,7 @@ export async function deleteRule(id: string) {
     }
   }
   revalidatePath("/chatbot");
+  revalidatePath("/chatbot/flow");
 }
 
 export async function toggleRule(id: string, active: boolean) {

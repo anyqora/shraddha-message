@@ -22,10 +22,22 @@ import {
   IconTargetArrow,
   IconChecklist,
   IconSparkles,
+  IconBolt,
+  IconWorld,
+  IconShoppingBag,
+  IconCreditCard,
+  IconTimeline,
+  IconQrcode,
+  IconFilter,
+  IconPlugConnected,
+  IconChartBar,
+  IconHistory,
+  IconDatabaseExport,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./ui";
 import { CommandMenu, useCommandMenu } from "./command-menu";
+import { NotificationBell } from "./notification-bell";
 
 type NavItem = { href: string; label: string; icon: typeof IconUser; tint: string; badge?: "unread" };
 const GROUPS: { title: string; items: NavItem[] }[] = [
@@ -53,6 +65,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/campaigns", label: "Campaigns", icon: IconSpeakerphone, tint: "#d6336c" },
       { href: "/chatbot", label: "Chatbot", icon: IconRobot, tint: "#b08800" },
       { href: "/ai", label: "AI Assistant", icon: IconSparkles, tint: "#7048e8" },
+      { href: "/automations", label: "Automations", icon: IconBolt, tint: "#e8590c" },
+      { href: "/widget", label: "Website chat", icon: IconWorld, tint: "#0c8599" },
     ],
   },
 ];
@@ -123,6 +137,7 @@ export function Sidebar({
         <button onClick={() => setOpen(true)} className="rounded-sm p-1 text-ink-3 hover:bg-black/[0.05]" title="Search (⌘K)">
           <IconSearch size={16} />
         </button>
+        <NotificationBell collapsed />
         <nav className="flex w-full flex-col gap-1 px-2">
           {GROUPS.flatMap((g) => g.items).map((n) => link(n))}
           {link({ href: "/settings", label: "Settings", icon: IconSettings, tint: "#999" })}
@@ -152,6 +167,7 @@ export function Sidebar({
           <span className="flex-1 text-left">Search</span>
           <kbd className="rounded-[3px] bg-black/[0.05] px-1 font-sans text-[11px] text-ink-3">⌘K</kbd>
         </button>
+        <NotificationBell />
         {link(
           { href: "/settings", label: "Settings", icon: IconSettings, tint: "#999" },
           !connected ? <span className="size-1.5 rounded-full bg-[#e8590c]" title="WhatsApp not connected" /> : null,

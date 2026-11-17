@@ -24,9 +24,9 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
   const rows = await db
     .select({
       c: companies,
-      contacts: sql<number>`(select count(*) from contacts ct where ct.company_id = ${companies.id})`,
-      openValue: sql<number>`(select coalesce(sum(d.amount), 0) from deals d join pipeline_stages s on s.id = d.stage_id where d.company_id = ${companies.id} and s.kind = 'open')`,
-      openCount: sql<number>`(select count(*) from deals d join pipeline_stages s on s.id = d.stage_id where d.company_id = ${companies.id} and s.kind = 'open')`,
+      contacts: sql<number>`(select count(*) from contacts ct where ct.company_id = companies.id)`,
+      openValue: sql<number>`(select coalesce(sum(d.amount), 0) from deals d join pipeline_stages s on s.id = d.stage_id where d.company_id = companies.id and s.kind = 'open')`,
+      openCount: sql<number>`(select count(*) from deals d join pipeline_stages s on s.id = d.stage_id where d.company_id = companies.id and s.kind = 'open')`,
     })
     .from(companies)
     .where(where)

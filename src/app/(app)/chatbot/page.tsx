@@ -12,6 +12,7 @@ import {
   IconChartBar,
   IconToggleRight,
   IconArrowRight,
+  IconHierarchy2,
 } from "@tabler/icons-react";
 import { db } from "@/lib/db";
 import { botRules } from "@/db/schema";
@@ -42,7 +43,12 @@ export default async function ChatbotPage() {
     <Page
       title="Chatbot"
       icon={<IconRobot />}
-      actions={<Link href="/chatbot/new" className="btn btn-primary"><IconPlus size={14} /> New rule</Link>}
+      actions={
+        <>
+          <Link href="/chatbot/flow" className="btn"><IconHierarchy2 size={14} /> Flow view</Link>
+          <Link href="/chatbot/new" className="btn btn-primary"><IconPlus size={14} /> New rule</Link>
+        </>
+      }
     >
       <div className="space-y-4">
         {!settings.waAccessToken && (
