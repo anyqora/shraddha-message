@@ -30,7 +30,7 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 191 }).notNull().unique(),
   name: varchar("name", { length: 191 }).notNull().default(""),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
-  role: mysqlEnum("role", ["admin", "agent"]).notNull().default("agent"),
+  role: mysqlEnum("role", ["admin", "manager", "agent"]).notNull().default("agent"),
   lastSignInAt: datetime("last_sign_in_at", { mode: "date" }),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -81,6 +81,8 @@ export const contacts = mysqlTable(
     webVisitorId: varchar("web_visitor_id", { length: 64 }),
     birthday: varchar("birthday", { length: 5 }), // MM-DD
     anniversary: varchar("anniversary", { length: 5 }), // MM-DD
+    // chatbot conversation state: waiting for an answer to a question step, collected answers
+    botState: json("bot_state").$type<{ awaitingRuleId?: string; answers?: Record<string, string>; startedAt?: string } | null>(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -246,7 +248,11 @@ export const botRules = mysqlTable(
     trigger: mysqlEnum("trigger", ["keyword", "welcome", "fallback", "menu"]).notNull().default("keyword"),
     keywords: varchar("keywords", { length: 1000 }).notNull().default(""),
     matchType: mysqlEnum("match_type", ["exact", "contains", "starts"]).notNull().default("contains"),
-    replyType: mysqlEnum("reply_type", ["text", "buttons", "list"]).notNull().default("text"),
+    // question: asks and waits for a typed answer (saved to saveTo) · book: offers appointment slots · lead: saves collected answers as a lead
+    replyType: mysqlEnum("reply_type", ["text", "buttons", "list", "question", "book", "lead"]).notNull().default("text"),
+    saveTo: varchar("save_to", { length: 100 }).notNull().default(""),
+    validation: mysqlEnum("validation", ["none", "email", "phone", "number", "date"]).notNull().default("none"),
+    nextRuleId: varchar("next_rule_id", { length: 36 }),
     header: varchar("header", { length: 60 }).notNull().default(""),
     body: text("body").notNull(),
     footer: varchar("footer", { length: 60 }).notNull().default(""),
@@ -627,6 +633,45 @@ export const auditLog = mysqlTable(
   (t) => [index("audit_created_idx").on(t.createdAt), index("audit_entity_idx").on(t.entity, t.entityId)],
 );
 
+/* ------------------------------------------------ leads & appointments */
+
+export const leads = mysqlTable(
+  "leads",
+  {
+    id: uuid().primaryKey(),
+    contactId: varchar("contact_id", { length: 36 }),
+    title: varchar("title", { length: 191 }).notNull().default(""),
+    source: varchar("source", { length: 64 }).notNull().default("chatbot"),
+    data: json("data").$type<Record<string, string>>().notNull().default({}),
+    status: mysqlEnum("status", ["new", "contacted", "qualified", "converted", "lost"]).notNull().default("new"),
+    assignedTo: varchar("assigned_to", { length: 36 }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("leads_status_idx").on(t.status, t.createdAt), index("leads_contact_idx").on(t.contactId)],
+);
+
+export const appointments = mysqlTable(
+  "appointments",
+  {
+    id: uuid().primaryKey(),
+    contactId: varchar("contact_id", { length: 36 }),
+    service: varchar("service", { length: 191 }).notNull().default(""),
+    startAt: datetime("start_at", { mode: "date" }).notNull(),
+    durationMin: int("duration_min").notNull().default(30),
+    status: mysqlEnum("status", ["booked", "confirmed", "cancelled", "completed", "no_show"]).notNull().default("booked"),
+    notes: text("notes").notNull(),
+    assignedTo: varchar("assigned_to", { length: 36 }),
+    reminderSentAt: datetime("reminder_sent_at", { mode: "date" }),
+    source: varchar("source", { length: 32 }).notNull().default("manual"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index("appointments_start_idx").on(t.startAt), index("appointments_contact_idx").on(t.contactId)],
+);
+
+export type Lead = typeof leads.$inferSelect;
+export type Appointment = typeof appointments.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type PaymentLink = typeof paymentLinks.$inferSelect;
 export type DripSequence = typeof dripSequences.$inferSelect;

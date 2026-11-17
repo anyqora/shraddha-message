@@ -3,6 +3,7 @@ import { runCampaigns } from "@/lib/campaign-runner";
 import { runDueAutomations } from "@/lib/automations";
 import { runDueDrips } from "@/lib/drips";
 import { runDateWishes } from "@/lib/date-wishes";
+import { runAppointmentReminders } from "@/lib/appointments";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,7 +22,8 @@ export async function GET(req: Request) {
   const automations = await runDueAutomations().catch((e) => ({ error: String(e) }));
   const drips = await runDueDrips().catch((e) => ({ error: String(e) }));
   const wishes = await runDateWishes().catch((e) => ({ error: String(e) }));
+  const reminders = await runAppointmentReminders().catch((e) => ({ error: String(e) }));
   const r = await runCampaigns(45_000);
-  return Response.json({ ...r, automations, drips, wishes });
+  return Response.json({ ...r, automations, drips, wishes, reminders });
 }
 export const POST = GET;

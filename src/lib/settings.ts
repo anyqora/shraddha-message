@@ -42,6 +42,15 @@ export type AppSettings = {
   upiName: string;
   sheetsWebhookUrl: string;
   sheetsEvents: string; // comma separated event names
+  apptDays: string; // working days, e.g. "1,2,3,4,5,6" (Mon=1 … Sun=7)
+  apptStart: string; // "10:00" IST
+  apptEnd: string; // "19:00" IST
+  apptSlotMin: number;
+  apptDaysAhead: number;
+  apptReminderHours: number;
+  apptReminderTemplateId: string;
+  permissions: string; // JSON: { [role]: string[] of permission keys }
+  agentSeesOnlyOwnChats: boolean;
 };
 
 const SECRET_KEYS = new Set(["waAccessToken", "waAppSecret", "aiApiKey", "smtpPass", "razorpayKeySecret", "razorpayWebhookSecret"]);
@@ -83,6 +92,15 @@ const DEFAULTS: AppSettings = {
   upiName: "",
   sheetsWebhookUrl: "",
   sheetsEvents: "contact.created,message.received",
+  apptDays: "1,2,3,4,5,6",
+  apptStart: "10:00",
+  apptEnd: "19:00",
+  apptSlotMin: 30,
+  apptDaysAhead: 7,
+  apptReminderHours: 24,
+  apptReminderTemplateId: "",
+  permissions: "",
+  agentSeesOnlyOwnChats: false,
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -93,7 +111,8 @@ export async function getSettings(): Promise<AppSettings> {
     let v: unknown = SECRET_KEYS.has(r.key) ? safeDecrypt(r.value) : r.value;
     if (r.key === "throttlePerMinute") v = Math.max(1, Number(v) || DEFAULTS.throttlePerMinute);
     if (r.key === "botPauseHours") v = Math.max(1, Number(v) || DEFAULTS.botPauseHours);
-    if (["botEnabled", "aiEnabled", "aiVision", "aiTranscribe", "widgetEnabled"].includes(r.key)) v = v === "true";
+    if (["botEnabled", "aiEnabled", "aiVision", "aiTranscribe", "widgetEnabled", "agentSeesOnlyOwnChats"].includes(r.key)) v = v === "true";
+    if (["apptSlotMin", "apptDaysAhead", "apptReminderHours"].includes(r.key)) v = Number(v) || (DEFAULTS as any)[r.key];
     if (r.key === "smtpPort" || r.key === "mediaStoreMaxMb") v = Number(v) || (DEFAULTS as any)[r.key];
     if (r.key === "aiMaxRepliesPerChat") v = Math.max(1, Number(v) || DEFAULTS.aiMaxRepliesPerChat);
     out[r.key] = v;
