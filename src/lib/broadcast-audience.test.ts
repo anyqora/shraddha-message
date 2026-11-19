@@ -305,7 +305,19 @@ describe('countAudience', () => {
   it('counts "all" with a head request', async () => {
     const { db, requests } = cappedPostgrest({ contacts: contacts(2812) });
     expect(await countAudience(db, { type: 'all' })).toBe(2812);
-    expect(requests).toEqual([{ table: 'contacts', inValues: 0, head: true }]);
+    // One head count, plus the opted-out lookup every audience runs.
+    expect(requests).toEqual([
+      { table: 'contacts', inValues: 0, head: true },
+      { table: 'contacts', inValues: 0, head: false },
+    ]);
+  });
+
+  it('leaves opted-out contacts out of the count and the audience', async () => {
+    const all: Row[] = contacts(5).map((c, i) => ({ ...c, opted_out: i < 2 }));
+    const { db } = cappedPostgrest({ contacts: all });
+    expect(await countAudience(db, { type: 'all' })).toBe(3);
+    const resolved = await resolveAudienceContacts(db, { type: 'all' }, noCsv);
+    expect(resolved.map((c) => c.id)).toEqual(all.slice(2).map((c) => c.id));
   });
 
   it('subtracts a large exclude list from "all"', async () => {

@@ -119,6 +119,12 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  /** Excluded from every broadcast (replied STOP, or flagged by hand /
+   *  import). START clears it. Inbox conversations are unaffected. */
+  opted_out?: boolean;
+  opted_out_at?: string | null;
+  /** 'keyword' | 'manual' | 'import' — display only. */
+  opt_out_source?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
@@ -424,7 +430,9 @@ export interface Broadcast {
   template_language: string;
   template_variables?: Record<string, unknown>;
   audience_filter?: Record<string, unknown>;
-  scheduled_at?: string;
+  /** Set (with status 'scheduled') when the broadcast waits for the
+   *  cron; stays set while the scheduled send is in flight. */
+  scheduled_at?: string | null;
   status: BroadcastStatus;
   total_recipients: number;
   sent_count: number;
@@ -439,6 +447,8 @@ export interface Broadcast {
    */
   delivery_locked_at?: string | null;
   delivery_lease_until?: string | null;
+  /** Media URL for an image/video/document header, chosen in the wizard. */
+  header_media_url?: string | null;
   created_at: string;
 }
 

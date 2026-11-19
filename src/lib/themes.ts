@@ -8,12 +8,13 @@
  *
  * Adding a new theme is a two-step change:
  *   1. Append the new `html[data-theme="<id>"]` block in globals.css
- *      with every token from an existing theme (use violet as the
+ *      with every token from an existing theme (use blue as the
  *      shape reference).
  *   2. Add an entry below. The order here drives the picker grid.
  */
 
 export const THEME_IDS = [
+  "blue",
   "violet",
   "emerald",
   "cobalt",
@@ -23,7 +24,7 @@ export const THEME_IDS = [
 
 export type ThemeId = (typeof THEME_IDS)[number];
 
-export const DEFAULT_THEME: ThemeId = "violet";
+export const DEFAULT_THEME: ThemeId = "blue";
 
 export const STORAGE_KEY = "wacrm.theme";
 
@@ -32,9 +33,8 @@ export const STORAGE_KEY = "wacrm.theme";
  *
  * The CSS variables live in `src/app/globals.css` under
  * `html[data-mode="..."]` blocks (neutral surfaces only). Applied
- * at runtime via `document.documentElement.dataset.mode`. Dark is
- * the historical default and stays the app's identity; light is the
- * opt-in eye-strain-friendly alternative.
+ * at runtime via `document.documentElement.dataset.mode`. Light is
+ * the default (Twenty-style redesign); dark is the opt-in alternative.
  *
  * Persisted under its own localStorage key so it composes freely
  * with the accent choice (you can run Violet-light or Violet-dark).
@@ -43,7 +43,7 @@ export const MODES = ["light", "dark"] as const;
 
 export type Mode = (typeof MODES)[number];
 
-export const DEFAULT_MODE: Mode = "dark";
+export const DEFAULT_MODE: Mode = "light";
 
 export const MODE_STORAGE_KEY = "wacrm.mode";
 
@@ -68,9 +68,15 @@ export interface ThemeMeta {
 
 export const THEMES: ReadonlyArray<ThemeMeta> = [
   {
+    id: "blue",
+    name: "Blue",
+    tagline: "The default — calm, focused, built for long sessions.",
+    swatch: "color(display-p3 0.276 0.384 0.837)",
+  },
+  {
     id: "violet",
     name: "Violet",
-    tagline: "The default — confident, slightly playful.",
+    tagline: "Confident, slightly playful.",
     swatch: "oklch(0.526 0.247 293)",
   },
   {

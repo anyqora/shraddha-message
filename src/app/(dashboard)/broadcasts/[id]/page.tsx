@@ -35,6 +35,8 @@ import {
   Trash2,
   PlayCircle,
   RotateCcw,
+  CalendarClock,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -167,6 +169,7 @@ export default function BroadcastDetailPage() {
   const [resumingScope, setResumingScope] = useState<
     'pending' | 'failed' | null
   >(null);
+  const [cancellingSchedule, setCancellingSchedule] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -285,6 +288,35 @@ export default function BroadcastDetailPage() {
     }
   }
 
+  /** Unschedule: the broadcast goes back to a draft, recipients kept. */
+  async function handleCancelSchedule() {
+    setCancellingSchedule(true);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/cancel`, {
+        method: 'POST',
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(
+          t('toastCancelScheduleFailed', {
+            error: payload?.error || `HTTP ${res.status}`,
+          }),
+        );
+        return;
+      }
+      toast.success(t('toastScheduleCancelled'));
+      await fetchData();
+    } catch (err) {
+      toast.error(
+        t('toastCancelScheduleFailed', {
+          error: err instanceof Error ? err.message : t('unknownError'),
+        }),
+      );
+    } finally {
+      setCancellingSchedule(false);
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true);
     const supabase = createClient();
@@ -332,6 +364,10 @@ export default function BroadcastDetailPage() {
   // still pending and nothing left to move them. Name that state rather
   // than leaving a permanently pulsing "sending" badge.
   const isStalled = broadcast.status === 'sending' && pendingCount > 0;
+  const isScheduled = broadcast.status === 'scheduled';
+  // A cancelled schedule (or a draft with frozen recipients) can still
+  // be sent by hand — "Send now" runs it server-side via resume.
+  const isUnsentDraft = broadcast.status === 'draft' && pendingCount > 0;
 
   const funnelSteps: FunnelStep[] = [
     { label: t('stats.sent'), value: broadcast.sent_count, color: 'bg-primary' },
@@ -416,18 +452,73 @@ export default function BroadcastDetailPage() {
         )}
       </div>
 
+      {/* Scheduled — waiting for the cron. Send it early or unschedule. */}
+      {isScheduled && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <div className="flex items-start gap-3 text-sm">
+            <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+            <div>
+              <p className="font-medium text-foreground">
+                {t('scheduledTitle', {
+                  when: broadcast.scheduled_at
+                    ? new Date(broadcast.scheduled_at).toLocaleString()
+                    : '—',
+                })}
+              </p>
+              <p className="mt-0.5 text-muted-foreground">
+                {t('scheduledHint', { count: pendingCount })}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => handleResume('pending')}
+              disabled={resumingScope !== null || cancellingSchedule || pendingCount === 0}
+            >
+              {resumingScope === 'pending' ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <PlayCircle className="h-3.5 w-3.5" />
+              )}
+              {t('sendScheduledNow')}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelSchedule}
+              disabled={resumingScope !== null || cancellingSchedule}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              {cancellingSchedule ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" />
+              )}
+              {t('cancelSchedule')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Resume / retry (issue #472). Only rendered when there is
           actually something outstanding. */}
-      {!deliveryInFlight && (pendingCount > 0 || retryableCount > 0) && (
+      {!isScheduled && !deliveryInFlight && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">
-              {isStalled ? t('resumeStalledTitle') : t('resumeTitle')}
+              {isUnsentDraft
+                ? t('unsentDraftTitle')
+                : isStalled
+                  ? t('resumeStalledTitle')
+                  : t('resumeTitle')}
             </p>
             <p className="mt-0.5 text-muted-foreground">
-              {isStalled
-                ? t('resumeStalledHint', { count: pendingCount })
-                : t('resumeHint', { count: retryableCount })}
+              {isUnsentDraft
+                ? t('unsentDraftHint', { count: pendingCount })
+                : isStalled
+                  ? t('resumeStalledHint', { count: pendingCount })
+                  : t('resumeHint', { count: retryableCount })}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

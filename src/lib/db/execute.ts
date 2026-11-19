@@ -520,7 +520,7 @@ async function attachEmbeds(
           .join(' OR ')})`
       }
       const embOrders = orders.filter((o) => o.referencedTable === key || o.referencedTable === it.relation)
-      const sql = `SELECT ${proj.cols.join(', ')} FROM ${q(rel.table)} AS ${q(ca)} WHERE ${inSql} AND ${where}${orderSql(embOrders, ca, rel.table)}`
+      const sql = `SELECT ${proj.cols.join(', ')} FROM ${q(rel.table)} AS ${q(ca)} WHERE ${where} AND ${inSql}${orderSql(embOrders, ca, rel.table)}`
       const rawRows = await query(sql, p.list, ex)
       const childRows = rawRows.map((r) => {
         const d = decodeProjected(rel.table, proj, r)

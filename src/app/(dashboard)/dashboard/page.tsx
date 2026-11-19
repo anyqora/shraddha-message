@@ -13,7 +13,7 @@ import type { ActivityItem } from '@/lib/dashboard/types'
 import {
   browserTimeZone,
   loadOverview,
-  needsSetup,
+  setupSteps,
   parseOverviewRange,
   type DashboardOverview,
   type OverviewRange,
@@ -151,29 +151,27 @@ function DashboardPageInner() {
         onRangeChange={handleRangeChange}
       />
 
-      {data && needsSetup(data.setup) ? (
+      {data && setupSteps(data.setup).some((s) => !s.done) ? (
         <SetupChecklist setup={data.setup} />
-      ) : (
-        <>
-          <AttentionRow data={data} now={now} onlineCount={onlineCount} />
-          <KpiRow data={data} currency={defaultCurrency} />
+      ) : null}
 
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
-            <MessageVolumeCard data={data} />
-            <ReplyQueueCard data={data} now={now} />
-          </div>
+      <AttentionRow data={data} now={now} onlineCount={onlineCount} />
+      <KpiRow data={data} currency={defaultCurrency} />
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-            <PipelineCard data={data} currency={defaultCurrency} />
-            <TeamCard data={data} now={now} />
-            <div className="lg:col-span-2 2xl:col-span-1">
-              <CampaignsCard data={data} />
-            </div>
-          </div>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+        <MessageVolumeCard data={data} />
+        <ReplyQueueCard data={data} now={now} />
+      </div>
 
-          <ActivityFeed items={activity} loading={activityLoading} />
-        </>
-      )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+        <PipelineCard data={data} currency={defaultCurrency} />
+        <TeamCard data={data} now={now} />
+        <div className="lg:col-span-2 2xl:col-span-1">
+          <CampaignsCard data={data} />
+        </div>
+      </div>
+
+      <ActivityFeed items={activity} loading={activityLoading} />
     </div>
   )
 }

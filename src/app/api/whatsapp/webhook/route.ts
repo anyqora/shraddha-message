@@ -32,6 +32,7 @@ import {
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
 import { applyMessageStatus } from '@/lib/whatsapp/message-status-sync'
+import { applyInboundOptKeyword } from '@/lib/whatsapp/opt-out'
 
 // The `after()` callback in POST runs within this route's max duration.
 // Inbound processing can fan out to per-media Meta verification calls, so
@@ -780,6 +781,15 @@ async function processMessage(
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
 
+  // STOP / UNSUBSCRIBE opts the contact out of broadcasts; START /
+  // SUBSCRIBE opts them back in. The message still lands in the inbox
+  // and still reaches flows and automations — only the AI auto-reply is
+  // skipped below, so a bot doesn't chat back at someone saying "stop".
+  const optKeyword =
+    message.type === 'text'
+      ? await applyInboundOptKeyword(supabaseAdmin(), contactRecord.id, message.text?.body)
+      : null
+
   // ============================================================
   // Flow runner dispatch.
   //
@@ -904,7 +914,7 @@ async function processMessage(
   // the account has enabled it. Awaited inside `after()` (same reason as
   // the webhook dispatch below); `dispatchInboundToAiReply` owns its
   // eligibility gates + try/catch and never throws.
-  if (!contentConsumed && !interactiveReplyId && inboundText.trim()) {
+  if (!contentConsumed && !interactiveReplyId && !optKeyword && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,

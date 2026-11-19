@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   dispatchInboundToAiReply: vi.fn(),
   dispatchWebhookEvent: vi.fn(),
   applyMessageStatus: vi.fn(),
+  applyInboundOptKeyword: vi.fn(),
   state: {
     // Result the message upsert's .select() resolves to. A genuine insert
     // returns the row; a replayed delivery conflicts and returns [].
@@ -55,7 +56,7 @@ vi.mock('next/server', () => ({
   },
 }))
 
-vi.mock('@supabase/supabase-js', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   createClient: () => ({
     from(table: string) {
       switch (table) {
@@ -276,6 +277,16 @@ vi.mock('@/lib/webhooks/deliver', () => ({
 vi.mock('@/lib/whatsapp/message-status-sync', () => ({
   applyMessageStatus: h.applyMessageStatus,
 }))
+vi.mock('@/lib/whatsapp/opt-out', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/whatsapp/opt-out')>()
+  return {
+    ...actual,
+    // Classify for real; skip the contacts write the table mock can't model.
+    applyInboundOptKeyword: h.applyInboundOptKeyword.mockImplementation(
+      async (_db: unknown, _id: string, text?: string) => actual.parseOptKeyword(text),
+    ),
+  }
+})
 
 import { POST } from './route'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
@@ -1171,5 +1182,22 @@ describe('inbound webhook: first_inbound_message fires once', () => {
     h.state.messageUpsertResult = []
     await runWebhook()
     expect(h.state.firstInboundClaims).toBe(0)
+  })
+})
+
+describe('inbound webhook: broadcast opt-out keywords', () => {
+  it('flags the contact on STOP and keeps the AI reply quiet', async () => {
+    await runWebhook({ ...TEXT_MESSAGE, text: { body: 'STOP' } })
+    expect(h.applyInboundOptKeyword).toHaveBeenCalledWith(expect.anything(), 'contact-1', 'STOP')
+    // Still stored and still offered to flows / automations.
+    expect(h.state.upsertCalls).toHaveLength(1)
+    expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
+  })
+
+  it('leaves an ordinary message to the AI reply', async () => {
+    await runWebhook()
+    expect(h.applyInboundOptKeyword).toHaveBeenCalledTimes(1)
+    expect(h.dispatchInboundToAiReply).toHaveBeenCalledTimes(1)
   })
 })

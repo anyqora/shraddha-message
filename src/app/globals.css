@@ -52,6 +52,30 @@
   --color-status-warning: var(--status-warning);
   --color-status-serious: var(--status-serious);
   --color-status-critical: var(--status-critical);
+  /* Twenty-style surface + text tiers (staging redesign). */
+  --color-frame: var(--frame);
+  --color-panel: var(--panel);
+  --color-hover: var(--hover);
+  --color-hover-strong: var(--hover-strong);
+  --color-tertiary-foreground: var(--tertiary-foreground);
+  --color-light-foreground: var(--light-foreground);
+  --color-border-strong: var(--border-strong);
+  --color-border-light: var(--border-light);
+  --shadow-light: var(--shadow-light-value);
+  --shadow-strong: var(--shadow-strong-value);
+  /* Compact type scale (13px body), as in staging. */
+  --text-xs: 0.6875rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.8125rem;
+  --text-base--line-height: 1.25rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl: 1.25rem;
+  --text-2xl--line-height: 1.75rem;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -65,181 +89,212 @@
  * THEMING — two orthogonal dimensions
  *
  *   1. MODE   (light / dark)  → neutral surfaces. Selected with
- *      `document.documentElement.dataset.mode`. Defaults to dark.
- *   2. ACCENT (violet / …)    → the primary color only. Selected
- *      with `document.documentElement.dataset.theme`.
+ *      `document.documentElement.dataset.mode`. Defaults to light.
+ *   2. ACCENT (blue / …)      → the primary color only. Selected
+ *      with `document.documentElement.dataset.theme`. Defaults to blue.
  *
- * The two compose: any accent works in either mode. Neutral
- * tokens (background / card / border / muted / sidebar surfaces /
- * neutral charts / radius) live in the MODE blocks below; accent
- * tokens (--primary*, --ring, --chart-1, --sidebar-primary*,
- * --sidebar-ring) live in the ACCENT blocks. They set disjoint
- * variables, so cascade order between them doesn't matter.
+ * Surface model (Twenty-CRM style):
+ *   --frame   the grey app background behind the sidebar + top bar
+ *   --panel   the white rounded content card and the side panel
+ *   --hover / --hover-strong   translucent row/button hover fills
+ *   --tertiary-foreground / --light-foreground   quieter text tiers
+ *   --border-strong / --border-light   border tiers
  *
- * `:root` carries the dark-mode + violet defaults so a visitor
- * renders correctly before JS runs; the boot script in
- * layout.tsx replays the saved mode + accent before first paint.
- *
- * The three `--primary-*` extras (hover / soft / soft-2) feed
- * hovered primary buttons and tinted-primary surfaces (sidebar
- * active pill, validation badges).
- *
- * Token shapes come straight from the design handoff at
- * project/Color Themes.html — change one, change the other.
+ * `:root` carries the light-mode + blue defaults so a visitor renders
+ * correctly before JS runs; the boot script in layout.tsx replays the
+ * saved mode + accent before first paint.
  * ============================================================ */
 
 /* ---- MODE: neutral surfaces ---- */
 
 :root,
-html[data-mode="dark"] {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.18 0.01 260);
-  --card-2: oklch(0.205 0.01 260);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.18 0.01 260);
-  --popover-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0.01 260);
-  --accent: oklch(0.22 0.01 260);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.28 0.01 260);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.16 0.01 260);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.22 0.01 260);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.28 0.01 260);
-  --status-good: #0ca30c;
-  --status-warning: #fab219;
-  --status-serious: #ec835a;
-  --status-critical: #e05252;
-}
-
 html[data-mode="light"] {
-  --background: oklch(0.99 0.002 260);
-  --foreground: oklch(0.21 0.01 260);
-  --card: oklch(1 0 0);
-  --card-2: oklch(0.985 0.002 260);
-  --card-foreground: oklch(0.21 0.01 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.21 0.01 260);
-  --secondary: oklch(0.967 0.003 260);
-  --secondary-foreground: oklch(0.25 0.01 260);
-  --muted: oklch(0.967 0.003 260);
-  --muted-foreground: oklch(0.52 0.015 260);
-  --accent: oklch(0.96 0.004 260);
-  --accent-foreground: oklch(0.25 0.01 260);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0.004 260);
-  --input: oklch(0.922 0.004 260);
-  --chart-2: oklch(0.6 0.1 260);
-  --chart-3: oklch(0.7 0.06 260);
-  --chart-4: oklch(0.8 0.04 260);
-  --chart-5: oklch(0.87 0.03 260);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0.002 260);
-  --sidebar-foreground: oklch(0.21 0.01 260);
-  --sidebar-accent: oklch(0.96 0.004 260);
-  --sidebar-accent-foreground: oklch(0.25 0.01 260);
-  --sidebar-border: oklch(0.922 0.004 260);
+  --frame: #f8f8f8;
+  --panel: #fff;
+  --background: #fcfcfc;
+  --foreground: #333;
+  --card: #fff;
+  --card-2: #fcfcfc;
+  --card-foreground: #333;
+  --popover: #fff;
+  --popover-foreground: #333;
+  --secondary: #f1f1f1;
+  --secondary-foreground: #333;
+  --muted: #f1f1f1;
+  --muted-foreground: #666;
+  --tertiary-foreground: #999;
+  --light-foreground: #b3b3b3;
+  --accent: #0000000a;
+  --accent-foreground: #333;
+  --hover: #0000000a;
+  --hover-strong: #00000012;
+  --destructive: #e5484d;
+  --border: #ebebeb;
+  --border-strong: #d6d6d6;
+  --border-light: #f1f1f1;
+  --input: #ebebeb;
+  --chart-2: #5c80bc;
+  --chart-3: #89a0c4;
+  --chart-4: #afbfd8;
+  --chart-5: #c9d5e9;
+  --radius: 0.5rem;
+  --sidebar: #f8f8f8;
+  --sidebar-foreground: #666;
+  --sidebar-accent: #0000000a;
+  --sidebar-accent-foreground: #333;
+  --sidebar-border: #ebebeb;
+  --shadow-light-value: 0px 2px 4px 0px #0000000a, 0px 0px 4px 0px #00000014;
+  --shadow-strong-value: 2px 4px 16px 0px #00000029, 0px 2px 4px 0px #00000014;
   --status-good: #0b7f0b;
   --status-warning: #946100;
   --status-serious: #c2532a;
   --status-critical: #c43232;
+  color-scheme: light;
+}
+
+html[data-mode="dark"] {
+  --frame: #131313;
+  --panel: #171717;
+  --background: #171717;
+  --foreground: #ebebeb;
+  --card: #1b1b1b;
+  --card-2: #1d1d1d;
+  --card-foreground: #ebebeb;
+  --popover: #1d1d1d;
+  --popover-foreground: #ebebeb;
+  --secondary: #222;
+  --secondary-foreground: #ebebeb;
+  --muted: #222;
+  --muted-foreground: #b3b3b3;
+  --tertiary-foreground: #818181;
+  --light-foreground: #666;
+  --accent: #ffffff0f;
+  --accent-foreground: #ebebeb;
+  --hover: #ffffff0f;
+  --hover-strong: #ffffff1a;
+  --destructive: #e5484d;
+  --border: #222;
+  --border-strong: #484848;
+  --border-light: #1d1d1d;
+  --input: #333;
+  --chart-2: #737373;
+  --chart-3: #525252;
+  --chart-4: #404040;
+  --chart-5: #262626;
+  --radius: 0.5rem;
+  --sidebar: #131313;
+  --sidebar-foreground: #b3b3b3;
+  --sidebar-accent: #ffffff0f;
+  --sidebar-accent-foreground: #ebebeb;
+  --sidebar-border: #222;
+  --shadow-light-value: 0px 2px 4px 0px #0003, 0px 0px 4px 0px #0000004d;
+  --shadow-strong-value: 2px 4px 16px 0px #00000080, 0px 2px 4px 0px #0000004d;
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #e05252;
+  color-scheme: dark;
 }
 
 /* ---- ACCENT: primary color ---- */
 
 :root,
+html[data-theme="blue"] {
+  --primary: #3e63dd;
+  --primary-foreground: #fff;
+  --primary-hover: #5472e4;
+  --primary-soft: #3e63dd1a;
+  --primary-soft-2: #3e63dd2e;
+  --ring: #8da4ef;
+  --chart-1: #3e63dd;
+  --sidebar-primary: #3e63dd;
+  --sidebar-primary-foreground: #fff;
+  --sidebar-ring: #8da4ef;
+}
+
 html[data-theme="violet"] {
-  --primary: oklch(0.526 0.247 293);
-  --primary-foreground: oklch(0.985 0 0);
-  --primary-hover: oklch(0.6 0.22 293);
-  --primary-soft: oklch(0.526 0.247 293 / 0.12);
-  --primary-soft-2: oklch(0.526 0.247 293 / 0.2);
-  --ring: oklch(0.526 0.247 293);
-  --chart-1: oklch(0.526 0.247 293);
-  --sidebar-primary: oklch(0.526 0.247 293);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-ring: oklch(0.526 0.247 293);
+  --primary: #7834e8;
+  --primary-foreground: #fafafa;
+  --primary-hover: #8a5af4;
+  --primary-soft: #7834e81f;
+  --primary-soft-2: #7834e833;
+  --ring: #7834e8;
+  --chart-1: #7834e8;
+  --sidebar-primary: #7834e8;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-ring: #7834e8;
 }
 
 html[data-theme="emerald"] {
-  --primary: oklch(0.62 0.16 162);
-  --primary-foreground: oklch(0.16 0.02 162);
-  --primary-hover: oklch(0.68 0.15 162);
-  --primary-soft: oklch(0.62 0.16 162 / 0.12);
-  --primary-soft-2: oklch(0.62 0.16 162 / 0.22);
-  --ring: oklch(0.62 0.16 162);
-  --chart-1: oklch(0.62 0.16 162);
-  --chart-2: oklch(0.7 0.14 195);
-  --sidebar-primary: oklch(0.62 0.16 162);
-  --sidebar-primary-foreground: oklch(0.16 0.02 162);
-  --sidebar-ring: oklch(0.62 0.16 162);
+  --primary: #009f6c;
+  --primary-foreground: #06100b;
+  --primary-hover: #00b47b;
+  --primary-soft: #009f6c1f;
+  --primary-soft-2: #009f6c38;
+  --ring: #009f6c;
+  --chart-1: #009f6c;
+  --chart-2: #00b5b6;
+  --sidebar-primary: #009f6c;
+  --sidebar-primary-foreground: #06100b;
+  --sidebar-ring: #009f6c;
 }
 
 html[data-theme="cobalt"] {
-  --primary: oklch(0.585 0.2 254);
-  --primary-foreground: oklch(0.985 0 0);
-  --primary-hover: oklch(0.66 0.18 254);
-  --primary-soft: oklch(0.585 0.2 254 / 0.12);
-  --primary-soft-2: oklch(0.585 0.2 254 / 0.22);
-  --ring: oklch(0.585 0.2 254);
-  --chart-1: oklch(0.585 0.2 254);
-  --chart-2: oklch(0.7 0.15 220);
-  --sidebar-primary: oklch(0.585 0.2 254);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-ring: oklch(0.585 0.2 254);
+  --primary: #007ae7;
+  --primary-foreground: #fafafa;
+  --primary-hover: #3293fc;
+  --primary-soft: #007ae71f;
+  --primary-soft-2: #007ae738;
+  --ring: #007ae7;
+  --chart-1: #007ae7;
+  --chart-2: #00b0d6;
+  --sidebar-primary: #007ae7;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-ring: #007ae7;
 }
 
 html[data-theme="amber"] {
-  --primary: oklch(0.745 0.16 65);
-  --primary-foreground: oklch(0.18 0.03 65);
-  --primary-hover: oklch(0.8 0.15 65);
-  --primary-soft: oklch(0.745 0.16 65 / 0.12);
-  --primary-soft-2: oklch(0.745 0.16 65 / 0.22);
-  --ring: oklch(0.745 0.16 65);
-  --chart-1: oklch(0.745 0.16 65);
-  --chart-2: oklch(0.7 0.15 35);
-  --sidebar-primary: oklch(0.745 0.16 65);
-  --sidebar-primary-foreground: oklch(0.18 0.03 65);
-  --sidebar-ring: oklch(0.745 0.16 65);
+  --primary: #f0941d;
+  --primary-foreground: #1b0f04;
+  --primary-hover: #ffa747;
+  --primary-soft: #f0941d1f;
+  --primary-soft-2: #f0941d38;
+  --ring: #f0941d;
+  --chart-1: #f0941d;
+  --chart-2: #ec785b;
+  --sidebar-primary: #f0941d;
+  --sidebar-primary-foreground: #1b0f04;
+  --sidebar-ring: #f0941d;
 }
 
 html[data-theme="rose"] {
-  --primary: oklch(0.645 0.22 16);
-  --primary-foreground: oklch(0.985 0 0);
-  --primary-hover: oklch(0.71 0.2 16);
-  --primary-soft: oklch(0.645 0.22 16 / 0.12);
-  --primary-soft-2: oklch(0.645 0.22 16 / 0.22);
-  --ring: oklch(0.645 0.22 16);
-  --chart-1: oklch(0.645 0.22 16);
-  --chart-2: oklch(0.7 0.18 340);
-  --sidebar-primary: oklch(0.645 0.22 16);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-ring: oklch(0.645 0.22 16);
+  --primary: #f63b5e;
+  --primary-foreground: #fafafa;
+  --primary-hover: #ff6679;
+  --primary-soft: #f63b5e1f;
+  --primary-soft-2: #f63b5e38;
+  --ring: #f63b5e;
+  --chart-1: #f63b5e;
+  --chart-2: #e56bc1;
+  --sidebar-primary: #f63b5e;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-ring: #f63b5e;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   body {
     @apply bg-background text-foreground;
+    font-size: 13px;
+    line-height: 1.5;
   }
   .recharts-cartesian-axis-tick-value {
     fill: var(--muted-foreground);
   }
   html {
     @apply font-sans;
+    -webkit-font-smoothing: antialiased;
   }
 }

@@ -80,7 +80,7 @@ vi.mock('@/lib/supabase/server', () => ({
 
 const serviceRole = vi.hoisted(() => ({ lookups: 0 }))
 
-vi.mock('@supabase/supabase-js', () => ({
+vi.mock('@/lib/supabase/admin', () => ({
   createClient: vi.fn(() => ({
     from: vi.fn(() => {
       serviceRole.lookups += 1

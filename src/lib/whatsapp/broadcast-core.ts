@@ -19,6 +19,13 @@
 import type { SupabaseClient } from '@/lib/supabase/types';
 
 import { sendTemplateMessage } from '@/lib/whatsapp/meta-api';
+import {
+  defaultSleep,
+  isRetryableRateLimit,
+  RATE_LIMIT_MAX_RETRIES,
+  rateLimitBackoffMs,
+  sendIntervalMs,
+} from '@/lib/whatsapp/broadcast-pacing';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import {
   parseInternationalPhone,
@@ -71,10 +78,36 @@ export interface BroadcastPlan {
   planned: PlannedRecipient[];
   /** Phones rejected up front (invalid E.164) — counted as failed. */
   rejected: number;
+  /**
+   * Media URL for an IMAGE/VIDEO/DOCUMENT header template. Persisted on
+   * the broadcast row so a deferred (scheduled) or resumed send uses the
+   * URL picked in the wizard.
+   */
+  headerMediaUrl?: string | null;
 }
 
 export interface CreatedBroadcastPlan extends BroadcastPlan {
   duplicates: number;
+  /** Recipients dropped because their contact opted out of broadcasts. */
+  optedOut: number;
+}
+
+export interface DeliverBroadcastOptions {
+  /**
+   * Stop starting new sends at this time. What's left stays 'pending'
+   * for the next pass (the cron's run is bounded by the host timeout).
+   */
+  deadline?: Date;
+  /** Injected in tests. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Gap between sends; defaults to BROADCAST_SEND_INTERVAL_MS. */
+  intervalMs?: number;
+}
+
+export interface DeliverBroadcastResult {
+  attempted: number;
+  /** True when the deadline cut the pass short. */
+  stoppedEarly: boolean;
 }
 
 const MAX_RECIPIENTS = 1000;
@@ -190,6 +223,32 @@ export async function createBroadcast(
     );
   }
 
+  // Contacts who replied STOP (or were flagged by an agent / import)
+  // never receive a broadcast, whichever path created it.
+  const optedOutIds = new Set<string>();
+  for (let i = 0; i < deduped.length; i += 200) {
+    const ids = deduped.slice(i, i + 200).map((r) => r.contactId);
+    const { data: optedRows, error: optedErr } = await db
+      .from('contacts')
+      .select('id')
+      .eq('account_id', accountId)
+      .eq('opted_out', true)
+      .in('id', ids);
+    if (optedErr) {
+      console.error('[broadcast-core] opt-out lookup failed:', optedErr);
+      throw new BroadcastError('internal', 'Failed to check opt-out status', 500);
+    }
+    for (const row of (optedRows ?? []) as { id: string }[]) optedOutIds.add(row.id);
+  }
+  const sendable = deduped.filter((r) => !optedOutIds.has(r.contactId));
+  if (sendable.length === 0) {
+    throw new BroadcastError(
+      'bad_request',
+      'Every recipient has opted out of broadcasts',
+      400
+    );
+  }
+
   // Persist the broadcast + its recipients. The count columns
   // (sent/delivered/read/replied/failed) are owned by the DB aggregate
   // trigger (migrations 003/005) and derived purely from
@@ -213,11 +272,11 @@ export async function createBroadcast(
       p_name: name || `API broadcast (${templateName})`,
       p_template_name: templateName,
       p_template_language: resolvedTemplate.language,
-      p_total_recipients: deduped.length,
-      p_contact_ids: deduped.map((r) => r.contactId),
+      p_total_recipients: sendable.length,
+      p_contact_ids: sendable.map((r) => r.contactId),
       // Frozen per-recipient params (migration 038) — without them a
       // resume of this broadcast has no way to reconstruct {{1}}.
-      p_template_params: deduped.map((r) => r.params),
+      p_template_params: sendable.map((r) => r.params),
     }
   );
   if (createErr || !createdRows || createdRows.length === 0) {
@@ -229,7 +288,7 @@ export async function createBroadcast(
 
   // Pair each inserted recipient row back to its phone/params by
   // contact_id — unambiguous now that duplicates are collapsed.
-  const byContact = new Map(deduped.map((r) => [r.contactId, r]));
+  const byContact = new Map(sendable.map((r) => [r.contactId, r]));
   const planned: PlannedRecipient[] = createdRows.map(
     (row: { recipient_id: string; contact_id: string }) => {
       const r = byContact.get(row.contact_id)!;
@@ -247,6 +306,7 @@ export async function createBroadcast(
     planned,
     rejected,
     duplicates: resolved.length - deduped.length,
+    optedOut: optedOutIds.size,
   };
 }
 
@@ -265,33 +325,72 @@ export async function createBroadcast(
  */
 export async function deliverBroadcast(
   db: SupabaseClient,
-  plan: BroadcastPlan
-): Promise<void> {
-  for (const recipient of plan.planned) {
+  plan: BroadcastPlan,
+  options: DeliverBroadcastOptions = {}
+): Promise<DeliverBroadcastResult> {
+  const sleep = options.sleep ?? defaultSleep;
+  const interval = options.intervalMs ?? sendIntervalMs();
+  const deadline = options.deadline?.getTime() ?? Infinity;
+  const messageParams = plan.headerMediaUrl
+    ? { headerMediaUrl: plan.headerMediaUrl }
+    : undefined;
+
+  let attempted = 0;
+  let stoppedEarly = false;
+
+  for (const [index, recipient] of plan.planned.entries()) {
+    if (Date.now() >= deadline) {
+      stoppedEarly = true;
+      break;
+    }
+    if (index > 0 && interval > 0) await sleep(interval);
+    attempted++;
+
     const variants = phoneVariants(recipient.phone);
     let sentMessageId: string | null = null;
     let lastError: string | null = null;
 
     for (const variant of variants) {
-      try {
-        const result = await sendTemplateMessage({
-          phoneNumberId: plan.phoneNumberId,
-          accessToken: plan.accessToken,
-          to: variant,
-          templateName: plan.templateName,
-          language: plan.templateLanguage,
-          template: plan.templateRow ?? undefined,
-          params: recipient.params,
-        });
-        sentMessageId = result.messageId;
-        lastError = null;
-        break;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        lastError = message;
-        // Only a "recipient not allowed" error is worth another variant.
-        if (!isRecipientNotAllowedError(message)) break;
+      let rateLimitRetries = 0;
+      let tryNextVariant = false;
+      for (;;) {
+        try {
+          const result = await sendTemplateMessage({
+            phoneNumberId: plan.phoneNumberId,
+            accessToken: plan.accessToken,
+            to: variant,
+            templateName: plan.templateName,
+            language: plan.templateLanguage,
+            template: plan.templateRow ?? undefined,
+            params: recipient.params,
+            ...(messageParams ? { messageParams } : {}),
+          });
+          sentMessageId = result.messageId;
+          lastError = null;
+          break;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          lastError = message;
+          // Meta asked us to slow down: wait and retry the same number
+          // rather than failing the recipient.
+          if (
+            isRetryableRateLimit(error) &&
+            rateLimitRetries < RATE_LIMIT_MAX_RETRIES
+          ) {
+            rateLimitRetries++;
+            const wait = rateLimitBackoffMs(rateLimitRetries);
+            console.warn(
+              `[broadcast] Meta rate limit on ${plan.broadcastId}; retry ${rateLimitRetries} in ${wait}ms`
+            );
+            await sleep(wait);
+            continue;
+          }
+          // Only a "recipient not allowed" error is worth another variant.
+          tryNextVariant = isRecipientNotAllowedError(message);
+          break;
+        }
       }
+      if (sentMessageId || !tryNextVariant) break;
     }
 
     if (sentMessageId) {
@@ -316,6 +415,7 @@ export async function deliverBroadcast(
   }
 
   await finalizeBroadcastStatus(db, plan.broadcastId);
+  return { attempted, stoppedEarly };
 }
 
 /**

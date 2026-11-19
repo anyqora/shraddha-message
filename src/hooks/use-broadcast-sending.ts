@@ -51,6 +51,12 @@ interface BroadcastPayload {
    * falls back to the template's stored URL only when this is empty.
    */
   headerMediaUrl?: string;
+  /**
+   * ISO timestamp to send at instead of now. The broadcast and its
+   * recipient rows (with frozen params) are written now with status
+   * 'scheduled'; GET /api/broadcasts/cron sends them when due.
+   */
+  scheduledAt?: string;
 }
 
 export type BroadcastSendInterruption = 'lease_lost' | 'lease_error';
@@ -58,6 +64,8 @@ export type BroadcastSendInterruption = 'lease_lost' | 'lease_error';
 export interface BroadcastSendOutcome {
   broadcastId: string;
   interruption: BroadcastSendInterruption | null;
+  /** True when the broadcast was scheduled rather than sent. */
+  scheduled?: boolean;
 }
 
 interface UseBroadcastSendingReturn {
@@ -328,7 +336,18 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         throw new Error(t('noContactsForAudience'));
       }
 
+      const headerType = payload.template.header_type;
+      const isMediaHeader =
+        headerType === 'image' ||
+        headerType === 'video' ||
+        headerType === 'document';
+      const headerMediaUrl = payload.headerMediaUrl?.trim();
+      const isScheduled = Boolean(payload.scheduledAt);
+
       // ── Step 2: Create broadcast row ──────────────────────────────
+      // A scheduled broadcast starts as 'draft' and only flips to
+      // 'scheduled' once every recipient row is in, so the cron can
+      // never pick up a half-written audience.
       setProgress(10);
       const { data: broadcast, error: broadcastError } = await supabase
         .from('broadcasts')
@@ -345,7 +364,10 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             customField: payload.audience.customField,
             excludeTagIds: payload.audience.excludeTagIds,
           },
-          status: 'sending',
+          status: isScheduled ? 'draft' : 'sending',
+          scheduled_at: payload.scheduledAt ?? null,
+          // Persisted so a deferred or resumed send can use it.
+          header_media_url: isMediaHeader && headerMediaUrl ? headerMediaUrl : null,
           total_recipients: contacts.length,
           sent_count: 0,
           delivered_count: 0,
@@ -422,6 +444,20 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         }
       }
 
+      if (isScheduled) {
+        const { error: scheduleError } = await supabase
+          .from('broadcasts')
+          .update({ status: 'scheduled' })
+          .eq('id', broadcast.id);
+        if (scheduleError) {
+          throw new Error(
+            t('createBroadcastFailed', { error: scheduleError.message }),
+          );
+        }
+        setProgress(100);
+        return { broadcastId: broadcast.id, interruption: null, scheduled: true };
+      }
+
       // ── Step 4: Fetch recipients back (joined contact) ────────────
       setProgress(30);
       let recipients: BroadcastRecipient[];
@@ -446,12 +482,6 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       // URL on every send. Collected in the personalize step and applied
       // to all recipients; falls back to the template's stored URL on the
       // server when omitted.
-      const headerType = payload.template.header_type;
-      const isMediaHeader =
-        headerType === 'image' ||
-        headerType === 'video' ||
-        headerType === 'document';
-      const headerMediaUrl = payload.headerMediaUrl?.trim();
       const messageParams =
         isMediaHeader && headerMediaUrl ? { headerMediaUrl } : undefined;
 

@@ -46,11 +46,12 @@ export default function NewBroadcastPage() {
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
 
-  async function handleSend() {
+  /** Send now, or — with `scheduledAt` — schedule for the cron. */
+  async function handleSend(scheduledAt?: string) {
     if (!template) return;
 
     try {
-      const { broadcastId, interruption } = await createAndSendBroadcast({
+      const { broadcastId, interruption, scheduled } = await createAndSendBroadcast({
         name,
         template,
         audience: {
@@ -62,7 +63,11 @@ export default function NewBroadcastPage() {
         },
         variables,
         headerMediaUrl,
+        scheduledAt,
       });
+      if (scheduled && scheduledAt) {
+        toast.success(t('toastScheduled', { when: new Date(scheduledAt).toLocaleString() }));
+      }
       if (interruption === 'lease_lost') toast.warning(t('toastSendTakenOver'));
       if (interruption === 'lease_error') toast.error(t('toastSendInterrupted'));
       router.push(`/broadcasts/${broadcastId}`);
@@ -223,7 +228,8 @@ export default function NewBroadcastPage() {
               onNameChange={setName}
               template={template}
               audience={audience}
-              onSend={handleSend}
+              onSend={() => handleSend()}
+              onSchedule={(scheduledAt) => handleSend(scheduledAt)}
               onSaveDraft={handleSaveDraft}
               onBack={() => setCurrentStep(2)}
               isProcessing={isProcessing}

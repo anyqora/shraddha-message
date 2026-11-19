@@ -93,14 +93,41 @@ export function fetchAllContacts(db: SupabaseClient): Promise<Contact[]> {
   );
 }
 
+/**
+ * Contacts who opted out of broadcasts (replied STOP, or flagged by an
+ * agent / import). Every audience excludes them. Row policies already
+ * scope a browser read to the user's account; `accountId` narrows a
+ * service-role read.
+ */
+export async function fetchOptedOutContactIds(
+  db: SupabaseClient,
+  accountId?: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    let query = db.from('contacts').select('id').eq('opted_out', true);
+    if (accountId) query = query.eq('account_id', accountId);
+    const { data, error } = await query.order('id').range(from, from + pageSize - 1);
+    if (error) throw new Error(`Failed to fetch opted-out contacts: ${error.message}`);
+    for (const row of (data ?? []) as { id: string }[]) ids.add(row.id);
+    if (!data || data.length < pageSize) break;
+  }
+  return ids;
+}
+
+/** Opted-out contacts plus the audience's excluded tags. */
 async function fetchExcludedIds(
   db: SupabaseClient,
   audience: AudienceConfig,
 ): Promise<Set<string>> {
+  const optedOut = await fetchOptedOutContactIds(db);
   if (!audience.excludeTagIds || audience.excludeTagIds.length === 0) {
-    return new Set();
+    return optedOut;
   }
-  return fetchTaggedContactIds(db, audience.excludeTagIds);
+  const excluded = await fetchTaggedContactIds(db, audience.excludeTagIds);
+  for (const id of optedOut) excluded.add(id);
+  return excluded;
 }
 
 function hasCustomFieldFilter(
@@ -127,19 +154,19 @@ export async function resolveAudienceContacts(
   audience: AudienceConfig,
   resolveCsv: (rows: CsvAudienceRow[]) => Promise<Contact[]>,
 ): Promise<Contact[]> {
-  const excluded = await fetchExcludedIds(db, audience);
-  const keep = (contact: Contact) => !excluded.has(contact.id);
-
   if (audience.type === 'all') {
-    return (await fetchAllContacts(db)).filter(keep);
+    const excluded = await fetchExcludedIds(db, audience);
+    return (await fetchAllContacts(db)).filter((c) => !excluded.has(c.id));
   }
   if (audience.type === 'csv') {
     if (!audience.csvContacts) return [];
-    return (await resolveCsv(audience.csvContacts)).filter(keep);
+    const excluded = await fetchExcludedIds(db, audience);
+    return (await resolveCsv(audience.csvContacts)).filter((c) => !excluded.has(c.id));
   }
 
   const ids = await fetchAudienceContactIds(db, audience);
   if (!ids) return [];
+  const excluded = await fetchExcludedIds(db, audience);
   const wanted = [...ids].filter((id) => !excluded.has(id));
   if (wanted.length === 0) return [];
   return fetchContactsByIds(db, wanted);

@@ -111,18 +111,32 @@ export interface ResumePlan {
    * they stop blocking the broadcast's terminal status.
    */
   unsendable: number;
+  /**
+   * In-scope rows whose contact opted out of broadcasts since the
+   * broadcast was planned (a scheduled send, or a resume days later).
+   * Stamped 'failed' rather than sent.
+   */
+  optedOut: number;
+}
+
+interface RecipientContact {
+  phone?: string | null;
+  opted_out?: boolean | null;
 }
 
 interface RecipientRow {
   id: string;
   template_params: unknown;
-  contact: { phone?: string | null } | { phone?: string | null }[] | null;
+  contact: RecipientContact | RecipientContact[] | null;
 }
 
 /** Supabase renders an embedded to-one join as an object or a 1-array. */
+function recipientContact(row: RecipientRow): RecipientContact | null {
+  return (Array.isArray(row.contact) ? row.contact[0] : row.contact) ?? null;
+}
+
 function contactPhone(row: RecipientRow): string | null {
-  const c = Array.isArray(row.contact) ? row.contact[0] : row.contact;
-  return c?.phone ?? null;
+  return recipientContact(row)?.phone ?? null;
 }
 
 /**
@@ -134,17 +148,21 @@ function contactPhone(row: RecipientRow): string | null {
  * sends what the original pass would have sent even if the contact has
  * been edited since.
  *
+ * `maxPerPass` lowers the per-pass cap (the scheduled-broadcast cron
+ * uses BROADCAST_CRON_MAX_PER_PASS to fit a pass inside its timeout).
+ *
  * Throws {@link BroadcastError}; the route maps it.
  */
 export async function planBroadcastResume(
   db: SupabaseClient,
   accountId: string,
   broadcastId: string,
-  scope: ResumeScope
+  scope: ResumeScope,
+  maxPerPass: number = RESUME_MAX_PER_REQUEST
 ): Promise<ResumePlan> {
   const { data: broadcast, error: bcError } = await db
     .from('broadcasts')
-    .select('id, template_name, template_language')
+    .select('id, template_name, template_language, header_media_url')
     .eq('id', broadcastId)
     .eq('account_id', accountId)
     .maybeSingle();
@@ -156,12 +174,13 @@ export async function planBroadcastResume(
   const statuses = scopeStatuses(scope);
   const sendable: RecipientRow[] = [];
   const unsendable: string[] = [];
+  const optedOut: string[] = [];
   let inScopeCount: number | null = null;
   let scanned = 0;
 
   for (
     let page = 0;
-    page < RESUME_MAX_SCAN_PAGES && sendable.length < RESUME_MAX_PER_REQUEST;
+    page < RESUME_MAX_SCAN_PAGES && sendable.length < maxPerPass;
     page++
   ) {
     const from = page * RESUME_MAX_PER_REQUEST;
@@ -171,7 +190,9 @@ export async function planBroadcastResume(
       error: recError,
     } = await db
       .from('broadcast_recipients')
-      .select('id, template_params, contact:contacts(phone)', { count: 'exact' })
+      .select('id, template_params, contact:contacts(phone, opted_out)', {
+        count: 'exact',
+      })
       .eq('broadcast_id', broadcastId)
       .in('status', statuses)
       // Oldest first, so repeated capped passes chew through the backlog
@@ -193,6 +214,10 @@ export async function planBroadcastResume(
     // it failed now: leaving it 'pending' would keep the broadcast in
     // 'sending' forever, which is the very symptom being fixed.
     for (const row of rows) {
+      if (recipientContact(row)?.opted_out) {
+        optedOut.push(row.id);
+        continue;
+      }
       const sanitized = sanitizePhoneForMeta(contactPhone(row) ?? '');
       if (isValidE164(sanitized)) sendable.push(row);
       else unsendable.push(row.id);
@@ -211,7 +236,17 @@ export async function planBroadcastResume(
       .in('id', ids);
   }
 
-  const slice = sendable.slice(0, RESUME_MAX_PER_REQUEST);
+  for (const ids of chunk(optedOut)) {
+    await db
+      .from('broadcast_recipients')
+      .update({
+        status: 'failed',
+        error_message: 'Contact opted out of broadcasts',
+      })
+      .in('id', ids);
+  }
+
+  const slice = sendable.slice(0, maxPerPass);
   const unloaded = Math.max(0, (inScopeCount ?? scanned) - scanned);
   const remaining = sendable.length - slice.length + unloaded;
 
@@ -267,9 +302,15 @@ export async function planBroadcastResume(
         : [],
     })),
     rejected: 0,
+    headerMediaUrl: broadcast.header_media_url ?? null,
   };
 
-  return { plan, remaining, unsendable: unsendable.length };
+  return {
+    plan,
+    remaining,
+    unsendable: unsendable.length,
+    optedOut: optedOut.length,
+  };
 }
 
 /**

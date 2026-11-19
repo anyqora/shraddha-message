@@ -1,75 +1,63 @@
 "use client";
 
+/**
+ * Primary navigation (Twenty-CRM style): sits directly on the grey app
+ * frame, no card or border.
+ *
+ *   [A] Workspace name ⌄          [collapse]
+ *   Search ⌘K · Inbox · Notifications
+ *   Workspace ▸ Dashboard … AI Agents
+ *   ─ bottom ─ Settings · current user
+ *
+ * Collapsible to an icon rail and drag-resizable on desktop (state lives in
+ * WorkspaceProvider); a slide-in drawer on mobile.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useTranslations } from "next-intl";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
+import {
+  IconBell,
+  IconBolt,
+  IconBuildingSkyscraper,
+  IconCheckbox,
+  IconChevronDown,
+  IconLayoutDashboard,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
+  IconLogout,
+  IconMessageCircle,
+  IconMoon,
+  IconRobot,
+  IconSearch,
+  IconSettings,
+  IconSitemap,
+  IconSpeakerphone,
+  IconSun,
+  IconTargetArrow,
+  IconUser,
+  IconX,
+  type IconProps,
+} from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/hooks/use-theme";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
-  Bell,
-  Bot,
-  Crown,
-  GitBranch,
-  LayoutDashboard,
-  LogOut,
-  MessageSquare,
-  Radio,
-  Settings,
-  Shield,
-  User,
-  UserCog,
-  Users,
-  UsersRound,
-  Workflow,
-  X,
-  Zap,
-} from "lucide-react";
-import type { AccountRole } from "@/lib/auth/roles";
-
-// Per-role chip metadata used in the sidebar's account strip + the
-// Members tab roster. Keeping this near both consumers in a single
-// place avoids drift between the two surfaces — when a designer
-// wants to recolour "agent" rows, this is the one diff.
-const ROLE_CHIP: Record<
-  AccountRole,
-  { icon: typeof Crown; labelKey: string; className: string }
-> = {
-  owner: {
-    icon: Crown,
-    labelKey: "roleOwner",
-    // Amber: scarce, immutable, "the boss" — gets visual emphasis.
-    className:
-      "border-amber-500/40 bg-amber-500/10 text-amber-300",
-  },
-  admin: {
-    icon: Shield,
-    labelKey: "roleAdmin",
-    // Primary-tinted: significant but not as scarce as owner.
-    className:
-      "border-primary/40 bg-primary/10 text-primary",
-  },
-  agent: {
-    icon: UserCog,
-    labelKey: "roleAgent",
-    // Neutral slate: the operational default.
-    className:
-      "border-border bg-muted text-foreground",
-  },
-  viewer: {
-    icon: User,
-    labelKey: "roleViewer",
-    // Muted slate: read-only role; visually quieter than agent.
-    className:
-      "border-border bg-card text-muted-foreground",
-  },
-};
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+  NAV_CONSTRAINTS,
+  useWorkspace,
+} from "@/components/layout/workspace-provider";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,323 +66,418 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type NavIcon = ComponentType<IconProps>;
+
 interface NavItem {
   href: string;
   labelKey: string;
-  icon: typeof LayoutDashboard;
-  /**
-   * When true, the nav row renders a small "Beta" chip after the label.
-   * Purely informational — doesn't affect routing or access.
-   */
+  icon: NavIcon;
+  /** Shows a small "Beta" chip after the label. Informational only. */
   beta?: boolean;
 }
 
-const navItems: NavItem[] = [
-  { href: "/dashboard", labelKey: "dashboard", icon: LayoutDashboard },
-  { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
-  { href: "/notifications", labelKey: "notifications", icon: Bell },
-  { href: "/contacts", labelKey: "contacts", icon: Users },
-  { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
-  { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
-  { href: "/automations", labelKey: "automations", icon: Zap },
-  { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
-  { href: "/agents", labelKey: "aiAgents", icon: Bot },
+export const workspaceNavItems: NavItem[] = [
+  { href: "/dashboard", labelKey: "dashboard", icon: IconLayoutDashboard },
+  { href: "/contacts", labelKey: "contacts", icon: IconUser },
+  { href: "/companies", labelKey: "companies", icon: IconBuildingSkyscraper },
+  { href: "/pipelines", labelKey: "pipelines", icon: IconTargetArrow },
+  { href: "/tasks", labelKey: "tasks", icon: IconCheckbox },
+  { href: "/broadcasts", labelKey: "broadcasts", icon: IconSpeakerphone },
+  { href: "/automations", labelKey: "automations", icon: IconBolt },
+  { href: "/flows", labelKey: "flows", icon: IconSitemap, beta: true },
+  { href: "/agents", labelKey: "aiAgents", icon: IconRobot },
 ];
 
-const bottomNavItems = [
-  { href: "/settings", labelKey: "settings", icon: Settings },
-];
-
-interface SidebarProps {
-  /** Controlled on mobile by the Header's hamburger button. Ignored on lg+. */
-  open?: boolean;
-  onClose?: () => void;
+export function isNavActive(pathname: string, href: string) {
+  return (
+    pathname === href ||
+    (href !== "/dashboard" && pathname.startsWith(`${href}/`))
+  );
 }
 
-import { useTranslations } from "next-intl";
+function NavRow({
+  href,
+  label,
+  icon: Icon,
+  active = false,
+  collapsed = false,
+  onClick,
+  trailing,
+}: {
+  href?: string;
+  label: string;
+  icon: NavIcon;
+  active?: boolean;
+  collapsed?: boolean;
+  onClick?: () => void;
+  trailing?: ReactNode;
+}) {
+  const className = cn(
+    "group/nav flex h-7 w-full items-center gap-2 rounded-sm px-1.5 text-[13px] transition-colors duration-75",
+    active
+      ? "bg-hover font-medium text-foreground"
+      : "text-muted-foreground hover:bg-hover hover:text-foreground",
+    collapsed && "justify-center px-0",
+  );
+  const content = (
+    <>
+      <Icon size={16} stroke={active ? 2 : 1.6} className="shrink-0" />
+      {!collapsed && (
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      )}
+      {!collapsed && trailing}
+    </>
+  );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={className}
+        title={collapsed ? label : undefined}
+        aria-current={active ? "page" : undefined}
+        onClick={onClick}
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={className}
+      title={collapsed ? label : undefined}
+      onClick={onClick}
+    >
+      {content}
+    </button>
+  );
+}
 
-export function Sidebar({ open = false, onClose }: SidebarProps) {
+export function Sidebar() {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { profile, account, accountRole, signOut } = useAuth();
+  const { mode, setMode } = useTheme();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
-  // Only surface the account-name strip when it actually carries
-  // information. A solo user's personal account is named after them
-  // (the 017 signup trigger seeds it from `full_name`), so showing it
-  // here would just duplicate the user name in the footer below. Once
-  // the account is renamed or the user joins a shared account, the
-  // name diverges and the strip becomes meaningful — that's the signal
-  // we gate on. Wait for the profile fetch to settle first, otherwise
-  // the strip flashes in once the row resolves (a layout jump).
-  const showAccountStrip =
-    !profileLoading &&
-    !!account?.name &&
-    account.name !== profile?.full_name;
+  const {
+    navCollapsed,
+    toggleNav,
+    navWidth,
+    setNavWidth,
+    mobileNavOpen,
+    setMobileNavOpen,
+    openSearch,
+  } = useWorkspace();
+  const [sectionOpen, setSectionOpen] = useState(true);
+  const [resizing, setResizing] = useState(false);
+  const dragStart = useRef<{ x: number; w: number } | null>(null);
 
-  // Close the drawer when route changes — users opened it to navigate,
-  // so once they pick a destination the drawer should get out of the way.
+  // Close the mobile drawer whenever the route changes.
   useEffect(() => {
-    onClose?.();
-    // Only pathname drives this — onClose identity doesn't need to re-run it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+    setMobileNavOpen(false);
+  }, [pathname, setMobileNavOpen]);
 
-  // Lock body scroll and allow Escape to close while the drawer is open on
-  // mobile. No-ops on desktop because the sidebar isn't positioned there.
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose?.();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
+  const onPointerDown = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (navCollapsed) return;
+      dragStart.current = { x: e.clientX, w: navWidth };
+      setResizing(true);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [navCollapsed, navWidth],
+  );
+  const onPointerMove = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (dragStart.current) {
+        setNavWidth(dragStart.current.w + (e.clientX - dragStart.current.x));
+      }
+    },
+    [setNavWidth],
+  );
+  const onPointerUp = useCallback(() => {
+    dragStart.current = null;
+    setResizing(false);
+  }, []);
+
+  // The mobile drawer always shows labels, even if desktop is collapsed.
+  const collapsed = navCollapsed && !mobileNavOpen;
+  const workspaceName = account?.name || profile?.full_name || "Workspace";
+  const workspaceInitial = (workspaceName.trim()[0] ?? "W").toUpperCase();
+  const roleLabel = accountRole
+    ? t(`role${accountRole[0].toUpperCase()}${accountRole.slice(1)}`)
+    : "";
 
   return (
     <>
-      {/* Backdrop — only exists on mobile and only when open. Clicking
-          it closes the drawer. Hidden from lg+ since the sidebar is
-          part of the main flex row there. */}
+      {/* Mobile backdrop */}
       <button
         type="button"
         aria-label={t("closeMenu")}
-        onClick={onClose}
+        onClick={() => setMobileNavOpen(false)}
         className={cn(
-          "fixed inset-0 z-30 bg-background/70 backdrop-blur-sm transition-opacity lg:hidden",
-          open
+          "fixed inset-0 z-30 bg-black/30 transition-opacity duration-300 lg:hidden",
+          mobileNavOpen
             ? "pointer-events-auto opacity-100"
             : "pointer-events-none opacity-0",
         )}
       />
 
       <aside
-        className={cn(
-          // Mobile: fixed drawer that slides in from the left.
-          "fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r border-border bg-card",
-          "transition-transform duration-200 ease-out will-change-transform",
-          open ? "translate-x-0" : "-translate-x-full",
-          // Desktop: static, always visible — reset all the mobile framing.
-          "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
-        )}
         aria-label={t("primaryNav")}
+        style={{ width: collapsed ? NAV_CONSTRAINTS.collapsed : navWidth }}
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col bg-frame lg:relative lg:z-0",
+          "transition-[transform] duration-300 ease-in-out lg:translate-x-0",
+          !resizing && "lg:transition-[width]",
+          mobileNavOpen ? "translate-x-0 shadow-strong" : "-translate-x-full",
+        )}
       >
-        {/* Logo row. On mobile we put a close button here; on desktop the
-            close button is hidden since the sidebar is always-visible. */}
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <MessageSquare className="h-4 w-4" />
-            </div>
-            <span className="text-sm font-semibold text-foreground">
-              {t("title")}
-            </span>
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("closeMenu")}
-            className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Main navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <ul className="flex flex-col gap-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
-
-              const showUnreadDot =
-                item.href === "/inbox" && totalUnread > 0 && !isActive;
-
-              // Unlike the inbox dot, the notifications count stays visible
-              // even while the page is active — it reflects unread state
-              // (cleared by marking notifications read), not "currently
-              // viewing this section".
-              const showNotificationBadge =
-                item.href === "/notifications" && unreadNotifications > 0;
-
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      // Taller on mobile so fingers can hit the row reliably (≥44px).
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
-                    {item.beta && (
-                      <span
-                        aria-label={t("beta")}
-                        className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-300"
-                      >
-                        {t("beta")}
-                      </span>
-                    )}
-                    {showUnreadDot && (
-                      <span
-                        aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
-                      >
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-                      </span>
-                    )}
-                    {showNotificationBadge && (
-                      <span
-                        aria-label={t("unreadNotifications", { count: unreadNotifications })}
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
-                      >
-                        {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-
-          <div className="my-4 border-t border-border" />
-
-          <ul className="flex flex-col gap-1">
-            {bottomNavItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:py-2",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        {/* User section */}
-        <div className="shrink-0 border-t border-border p-3">
-          {/* Account name display — surfaced only when the account
-              name differs from the user's own name (see
-              `showAccountStrip`). For a default solo account the two
-              match, so we hide it to avoid duplicating the user name
-              below; for renamed or shared accounts it tells the user
-              which account they're acting in. */}
-          {showAccountStrip && account?.name ? (
-            <div className="mb-2 flex items-center gap-2 px-3 text-xs text-muted-foreground">
-              <UsersRound className="size-3.5 shrink-0" />
-              {/* `title=` exposes the full name on hover when it
-                  gets truncated (long account names + narrow
-                  sidebars). Cheap a11y win. */}
-              <span className="truncate" title={account.name}>
-                {account.name}
-              </span>
-              {accountRole ? (
-                // Always render the chip — owners used to be
-                // invisible here, which made them indistinguishable
-                // from admins at a glance. Now everyone sees their
-                // role (with a colour cue) regardless of tier.
-                (() => {
-                  const meta = ROLE_CHIP[accountRole];
-                  const Icon = meta.icon;
-                  return (
-                    <span
-                      className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${meta.className}`}
-                    >
-                      <Icon className="size-3" />
-                      {t(meta.labelKey as string)}
-                    </span>
-                  );
-                })()
-              ) : null}
-            </div>
-          ) : null}
+        {/* Workspace switcher + collapse */}
+        <div
+          className={cn(
+            "flex h-12 shrink-0 items-center gap-1 px-2",
+            collapsed && "justify-center px-0",
+          )}
+        >
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none data-popup-open:bg-muted/60">
-              <Avatar className="size-8 shrink-0">
-                {profile?.avatar_url ? (
-                  <AvatarImage
-                    src={profile.avatar_url}
-                    alt={profile.full_name ?? t("defaultAvatar")}
+            <DropdownMenuTrigger
+              aria-label={t("openAccountMenu")}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 py-1 text-left transition-colors hover:bg-hover focus:outline-none data-popup-open:bg-hover",
+                collapsed && "flex-none justify-center px-1",
+              )}
+            >
+              <span className="flex size-[22px] shrink-0 items-center justify-center rounded-[4px] bg-foreground text-[11px] font-semibold text-background">
+                {workspaceInitial}
+              </span>
+              {!collapsed && (
+                <>
+                  <span
+                    className="min-w-0 truncate text-[13px] font-medium text-foreground"
+                    title={workspaceName}
+                  >
+                    {workspaceName}
+                  </span>
+                  <IconChevronDown
+                    size={14}
+                    className="shrink-0 text-tertiary-foreground"
                   />
-                ) : null}
-                <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                  {profile?.full_name?.charAt(0)?.toUpperCase() ??
-                    profile?.email?.charAt(0)?.toUpperCase() ??
-                    "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
+                </>
+              )}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" sideOffset={6} className="min-w-60">
+              <div className="px-2 py-1.5">
+                <p className="truncate text-[13px] font-medium text-foreground">
                   {profile?.full_name ?? t("defaultUser")}
                 </p>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate text-xs text-tertiary-foreground">
                   {profile?.email ?? ""}
+                  {roleLabel ? ` · ${roleLabel}` : ""}
                 </p>
               </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              side="top"
-              sideOffset={6}
-              className="min-w-56 bg-popover text-popover-foreground ring-border"
-            >
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href="/settings?tab=profile"
-                    onClick={onClose}
-                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-                  />
-                }
-              >
-                <User className="size-4" />
+              <DropdownMenuSeparator />
+              <DropdownMenuItem render={<Link href="/settings?tab=profile" />}>
+                <IconUser size={16} />
                 {t("menuProfile")}
               </DropdownMenuItem>
-              <DropdownMenuItem
-                render={
-                  <Link
-                    href="/settings?tab=whatsapp"
-                    onClick={onClose}
-                    className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
-                  />
-                }
-              >
-                <Settings className="size-4" />
+              <DropdownMenuItem render={<Link href="/settings" />}>
+                <IconSettings size={16} />
                 {t("menuSettings")}
               </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
-                onClick={signOut}
-                className="text-popover-foreground focus:bg-accent focus:text-accent-foreground"
+                onClick={() => setMode(mode === "dark" ? "light" : "dark")}
               >
-                <LogOut className="size-4" />
+                {mode === "dark" ? <IconSun size={16} /> : <IconMoon size={16} />}
+                {mode === "dark" ? t("lightMode") : t("darkMode")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut}>
+                <IconLogout size={16} />
                 {t("menuSignOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={mobileNavOpen ? () => setMobileNavOpen(false) : toggleNav}
+              aria-label={mobileNavOpen ? t("closeMenu") : t("collapse")}
+              title={t("collapse")}
+              className="flex size-7 shrink-0 items-center justify-center rounded-sm text-tertiary-foreground transition-colors hover:bg-hover hover:text-foreground"
+            >
+              {mobileNavOpen ? (
+                <IconX size={16} />
+              ) : (
+                <IconLayoutSidebarLeftCollapse size={16} stroke={1.6} />
+              )}
+            </button>
+          )}
         </div>
+
+        <nav
+          className={cn(
+            "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-2",
+            collapsed && "items-center px-1.5",
+          )}
+        >
+          {collapsed && (
+            <NavRow
+              label={t("expand")}
+              icon={IconLayoutSidebarLeftExpand}
+              collapsed
+              onClick={toggleNav}
+            />
+          )}
+          <NavRow
+            label={t("search")}
+            icon={IconSearch}
+            collapsed={collapsed}
+            onClick={openSearch}
+            trailing={
+              <kbd className="rounded-[4px] border border-border px-1 text-[10px] text-tertiary-foreground">
+                ⌘K
+              </kbd>
+            }
+          />
+          <NavRow
+            href="/inbox"
+            label={t("inbox")}
+            icon={IconMessageCircle}
+            active={isNavActive(pathname, "/inbox")}
+            collapsed={collapsed}
+            trailing={
+              totalUnread > 0 ? (
+                <span
+                  aria-label={t("unreadConversations", { count: totalUnread })}
+                  className="rounded-[4px] bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground"
+                >
+                  {totalUnread > 99 ? "99+" : totalUnread}
+                </span>
+              ) : null
+            }
+          />
+          <NavRow
+            href="/notifications"
+            label={t("notifications")}
+            icon={IconBell}
+            active={isNavActive(pathname, "/notifications")}
+            collapsed={collapsed}
+            trailing={
+              unreadNotifications > 0 ? (
+                <span
+                  aria-label={t("unreadNotifications", {
+                    count: unreadNotifications,
+                  })}
+                  className="rounded-[4px] bg-hover-strong px-1 text-[10px] leading-4 font-semibold text-foreground"
+                >
+                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                </span>
+              ) : null
+            }
+          />
+
+          <div className="mt-3">
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={() => setSectionOpen((v) => !v)}
+                aria-expanded={sectionOpen}
+                className="group/section flex h-6 w-full items-center gap-1 rounded-sm px-1.5 text-[11px] font-semibold text-light-foreground transition-colors hover:text-tertiary-foreground"
+              >
+                {t("workspaceSection")}
+                <IconChevronDown
+                  size={12}
+                  className={cn(
+                    "opacity-0 transition-transform duration-150 group-hover/section:opacity-100",
+                    !sectionOpen && "-rotate-90",
+                  )}
+                />
+              </button>
+            )}
+            <div
+              className={cn(
+                "grid transition-[grid-template-rows] duration-300 ease-in-out",
+                sectionOpen || collapsed ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+              )}
+            >
+              <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden">
+                {workspaceNavItems.map((item) => (
+                  <NavRow
+                    key={item.href}
+                    href={item.href}
+                    label={t(item.labelKey)}
+                    icon={item.icon}
+                    active={isNavActive(pathname, item.href)}
+                    collapsed={collapsed}
+                    trailing={
+                      item.beta ? (
+                        <span className="rounded-[4px] bg-hover px-1 text-[10px] leading-4 font-medium text-tertiary-foreground">
+                          {t("beta")}
+                        </span>
+                      ) : null
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-auto pt-3">
+            <NavRow
+              href="/settings"
+              label={t("settings")}
+              icon={IconSettings}
+              active={isNavActive(pathname, "/settings")}
+              collapsed={collapsed}
+            />
+            <div
+              className={cn(
+                "mt-1 flex items-center gap-2 px-1.5 py-1",
+                collapsed && "justify-center px-0",
+              )}
+            >
+              <Avatar className="size-5 shrink-0 rounded-[4px] after:rounded-[4px]">
+                {profile?.avatar_url ? (
+                  <AvatarImage src={profile.avatar_url} alt="" />
+                ) : null}
+                <AvatarFallback className="rounded-[4px] bg-hover-strong text-[10px] font-medium text-foreground">
+                  {(profile?.full_name ?? profile?.email ?? "U")
+                    .charAt(0)
+                    .toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <span className="min-w-0 truncate text-[13px] text-muted-foreground">
+                  {profile?.full_name ?? t("defaultUser")}
+                </span>
+              )}
+            </div>
+          </div>
+        </nav>
+
+        {!collapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("resize")}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={onPointerUp}
+            onDoubleClick={() => setNavWidth(NAV_CONSTRAINTS.default)}
+            className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize lg:block"
+          >
+            <div
+              className={cn(
+                "mx-auto h-full w-px transition-colors",
+                resizing
+                  ? "bg-border-strong"
+                  : "bg-transparent hover:bg-border-strong",
+              )}
+            />
+          </div>
+        )}
       </aside>
     </>
   );

@@ -2,9 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import type { SupabaseClient } from '@/lib/supabase/types';
 import {
   createBroadcast,
+  deliverBroadcast,
   finalizeBroadcastStatus,
   BroadcastError,
+  type BroadcastPlan,
 } from './broadcast-core';
+import { sendTemplateMessage, MetaApiError } from '@/lib/whatsapp/meta-api';
 
 // Contact resolution and token decryption are exercised elsewhere — stub
 // them so these tests focus on the persistence boundary.
@@ -14,6 +17,11 @@ vi.mock('@/lib/whatsapp/encryption', () => ({
 vi.mock('@/lib/api/v1/contacts', () => ({
   findOrCreateContact: vi.fn(async () => ({ id: 'c1' })),
 }));
+// Never reach Meta from a test.
+vi.mock('@/lib/whatsapp/meta-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/whatsapp/meta-api')>();
+  return { ...actual, sendTemplateMessage: vi.fn() };
+});
 
 // These assertions all fire in the pure validation prologue, before
 // any Supabase call — a bare stub is enough.
@@ -51,7 +59,10 @@ describe('createBroadcast validation', () => {
 // Build a Supabase-shaped mock that gets createBroadcast past its config +
 // template lookups and into persistence. `rpcResult` is what the atomic
 // create_broadcast_with_recipients RPC returns.
-function makeDb(rpcResult: { data: unknown; error: unknown }) {
+function makeDb(
+  rpcResult: { data: unknown; error: unknown },
+  optedOutIds: string[] = []
+) {
   const calls = {
     rpc: [] as { name: string; args: unknown }[],
     // Incremented if the OLD non-atomic path (a direct broadcasts /
@@ -78,6 +89,19 @@ function makeDb(rpcResult: { data: unknown; error: unknown }) {
           select: () => chain,
           eq: () => chain,
           maybeSingle: () => Promise.resolve({ data: null, error: null }),
+        };
+        return chain;
+      }
+      if (table === 'contacts') {
+        // The opt-out lookup: .select('id').eq().eq().in(ids)
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          eq: () => chain,
+          in: (_col: string, ids: string[]) =>
+            Promise.resolve({
+              data: ids.filter((id) => optedOutIds.includes(id)).map((id) => ({ id })),
+              error: null,
+            }),
         };
         return chain;
       }
@@ -291,5 +315,118 @@ describe('finalizeBroadcastStatus', () => {
       'b-1',
     );
     expect(writes.update?.status).toBe('sent');
+  });
+});
+
+describe('createBroadcast opt-out', () => {
+  it('drops opted-out contacts before persisting', async () => {
+    const { db, calls } = makeDb({ data: [], error: null }, ['c1']);
+    await expect(
+      createBroadcast(db, 'acc', 'user', {
+        templateName: 'promo',
+        recipients: [{ to: '+14155550123' }],
+      })
+    ).rejects.toMatchObject({
+      code: 'bad_request',
+      message: 'Every recipient has opted out of broadcasts',
+    });
+    expect(calls.rpc).toHaveLength(0);
+  });
+
+  it('reports optedOut: 0 when nobody opted out', async () => {
+    const { db } = makeDb({
+      data: [{ broadcast_id: 'b-1', recipient_id: 'r-1', contact_id: 'c1' }],
+      error: null,
+    });
+    const plan = await createBroadcast(db, 'acc', 'user', {
+      templateName: 'promo',
+      recipients: [{ to: '+14155550123' }],
+    });
+    expect(plan.optedOut).toBe(0);
+  });
+});
+
+describe('deliverBroadcast', () => {
+  function recordingDb() {
+    const updates: { table: string; values: Record<string, unknown>; id?: unknown }[] = [];
+    const db = {
+      from(table: string) {
+        const chain: Record<string, unknown> = {};
+        let values: Record<string, unknown> = {};
+        chain.update = (v: Record<string, unknown>) => {
+          values = v;
+          return chain;
+        };
+        chain.select = () => chain;
+        chain.eq = (col: string, val: unknown) => {
+          if (col === 'id') updates.push({ table, values, id: val });
+          return chain;
+        };
+        // finalizeBroadcastStatus' counts: report one pending row so it
+        // returns early and leaves the status alone.
+        chain.then = (resolve: (r: unknown) => unknown) =>
+          Promise.resolve(resolve({ data: null, count: 1, error: null }));
+        return chain;
+      },
+    } as unknown as SupabaseClient;
+    return { db, updates };
+  }
+
+  const plan = (n: number, extra: Partial<BroadcastPlan> = {}): BroadcastPlan => ({
+    broadcastId: 'b-1',
+    templateName: 'promo',
+    templateLanguage: 'en_US',
+    phoneNumberId: 'pn',
+    accessToken: 'tok',
+    templateRow: null,
+    planned: Array.from({ length: n }, (_, i) => ({
+      recipientRowId: `r-${i}`,
+      phone: `1415555000${i}`,
+      params: [],
+    })),
+    rejected: 0,
+    ...extra,
+  });
+
+  it('passes the persisted header media URL to every send', async () => {
+    const send = vi.mocked(sendTemplateMessage);
+    send.mockResolvedValue({ messageId: 'wamid.1' } as never);
+    const { db } = recordingDb();
+    await deliverBroadcast(db, plan(2, { headerMediaUrl: 'https://x/img.jpg' }), {
+      intervalMs: 0,
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[0][0]).toMatchObject({
+      messageParams: { headerMediaUrl: 'https://x/img.jpg' },
+    });
+  });
+
+  it('stops starting sends at the deadline and leaves the rest pending', async () => {
+    const send = vi.mocked(sendTemplateMessage);
+    send.mockResolvedValue({ messageId: 'wamid.1' } as never);
+    const { db, updates } = recordingDb();
+    const result = await deliverBroadcast(db, plan(3), {
+      deadline: new Date(Date.now() - 1),
+      intervalMs: 0,
+    });
+    expect(result).toEqual({ attempted: 0, stoppedEarly: true });
+    expect(send).not.toHaveBeenCalled();
+    expect(updates.filter((u) => u.table === 'broadcast_recipients')).toHaveLength(0);
+  });
+
+  it('waits out a Meta rate limit and retries the same recipient', async () => {
+    const send = vi.mocked(sendTemplateMessage);
+    send
+      .mockRejectedValueOnce(new MetaApiError('throttled', { code: 130429, httpStatus: 400 }))
+      .mockResolvedValueOnce({ messageId: 'wamid.2' } as never);
+    const sleep = vi.fn(async () => {});
+    const { db, updates } = recordingDb();
+    await deliverBroadcast(db, plan(1), { sleep, intervalMs: 0 });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(2000);
+    expect(updates.find((u) => u.table === 'broadcast_recipients')?.values).toMatchObject({
+      status: 'sent',
+      whatsapp_message_id: 'wamid.2',
+    });
   });
 });

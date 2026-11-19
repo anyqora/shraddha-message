@@ -515,3 +515,66 @@ describe('planBroadcastResume', () => {
     expect(plan.templateRow?.language).toBe('en');
   });
 });
+
+describe('planBroadcastResume opt-out and pass size', () => {
+  it('fails recipients who opted out since planning instead of sending them', async () => {
+    const writes: PlanWrites = {};
+    const { plan, optedOut } = await planBroadcastResume(
+      planDb(
+        {
+          broadcast: BROADCAST,
+          config: CONFIG,
+          recipients: [
+            recipient('r1', '+15551234567'),
+            { id: 'r2', template_params: [], contact: { phone: '+15559876543', opted_out: true } },
+          ],
+        },
+        writes,
+      ),
+      'acct-1',
+      'bc-1',
+      'pending',
+    );
+    expect(plan.planned.map((p) => p.recipientRowId)).toEqual(['r1']);
+    expect(optedOut).toBe(1);
+    expect(writes.failedIds).toEqual(['r2']);
+    expect(writes.failedUpdate).toEqual({
+      status: 'failed',
+      error_message: 'Contact opted out of broadcasts',
+    });
+  });
+
+  it('carries the persisted header media URL into the plan', async () => {
+    const { plan } = await planBroadcastResume(
+      planDb({
+        broadcast: { ...BROADCAST, header_media_url: 'https://x/img.jpg' },
+        config: CONFIG,
+        recipients: [recipient('r1', '+15551234567')],
+      }),
+      'acct-1',
+      'bc-1',
+      'pending',
+    );
+    expect(plan.headerMediaUrl).toBe('https://x/img.jpg');
+  });
+
+  it('honours a smaller per-pass cap and reports the rest as remaining', async () => {
+    const { plan, remaining } = await planBroadcastResume(
+      planDb({
+        broadcast: BROADCAST,
+        config: CONFIG,
+        recipients: [
+          recipient('r1', '+15551234567'),
+          recipient('r2', '+15551234568'),
+          recipient('r3', '+15551234569'),
+        ],
+      }),
+      'acct-1',
+      'bc-1',
+      'pending',
+      2,
+    );
+    expect(plan.planned).toHaveLength(2);
+    expect(remaining).toBe(1);
+  });
+});
