@@ -6,7 +6,9 @@ import 'server-only'
  */
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import type { PoolConnection } from 'mysql2/promise'
 import { getPool } from './pool'
+import { SCHEMA } from './schema.generated'
 
 export function migrationsDir(): string {
   return process.env.MIGRATIONS_DIR || path.join(process.cwd(), 'db', 'mysql', 'migrations')
@@ -20,6 +22,35 @@ function splitStatements(sql: string): string[] {
     .split(';')
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+/**
+ * First install into a database that already holds another app's tables (e.g. the previous
+ * "Shraddha Message" app on the same Hostinger MySQL): any existing table whose name we need
+ * but whose columns don't match ours is renamed to `legacy_<name>` (data kept, nothing dropped)
+ * so CREATE TABLE IF NOT EXISTS builds the real schema.
+ */
+async function renameForeignTables(conn: PoolConnection, log: (m: string) => void) {
+  const tables = SCHEMA.tables as unknown as Record<string, { columns: Record<string, unknown> }>
+  const [existing] = (await conn.query(
+    "SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'"
+  )) as any
+  const present = new Set<string>((existing as Array<{ t: string }>).map((r) => r.t))
+  for (const name of Object.keys(tables)) {
+    if (!present.has(name)) continue
+    const [cols] = (await conn.query(
+      'SELECT COLUMN_NAME AS c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?',
+      [name]
+    )) as any
+    const have = new Set<string>((cols as Array<{ c: string }>).map((r) => r.c))
+    const want = Object.keys(tables[name].columns)
+    if (want.every((c) => have.has(c))) continue
+    let target = `legacy_${name}`
+    for (let i = 2; present.has(target); i++) target = `legacy_${name}_${i}`
+    await conn.query(`RENAME TABLE \`${name}\` TO \`${target}\``)
+    present.add(target)
+    log(`[db] existing table ${name} does not match this app; renamed to ${target}`)
+  }
 }
 
 export async function runMigrations(log: (m: string) => void = console.log): Promise<string[]> {
@@ -39,6 +70,7 @@ export async function runMigrations(log: (m: string) => void = console.log): Pro
     )
     const [rows] = (await conn.query('SELECT version FROM schema_migrations')) as any
     const done = new Set<string>((rows as Array<{ version: string }>).map((r) => r.version))
+    if (!done.has('0001_init')) await renameForeignTables(conn, log)
     const dir = migrationsDir()
     const files = (await readdir(dir)).filter((f) => /^\d+_.+\.sql$/.test(f)).sort()
     for (const f of files) {

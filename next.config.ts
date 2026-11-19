@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 import createNextIntlPlugin from "next-intl/plugin";
 
@@ -73,13 +74,26 @@ const nextConfig: NextConfig = {
       "@app-messages": `./messages/${APP_LOCALE}.json`,
     },
   },
-  // Emit a self-contained server bundle (.next/standalone) so the
-  // Docker image can run without node_modules or the Next CLI.
-  // Harmless outside Docker: `next start` keeps working as before.
+  // Production builds use webpack (`next build --webpack`): Turbopack
+  // crashes on Hostinger's shared build host. Same alias for webpack.
+  webpack(config) {
+    config.resolve ??= {};
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@app-messages": path.resolve(process.cwd(), `messages/${APP_LOCALE}.json`),
+    };
+    return config;
+  },
+  // Self-contained server bundle (.next/standalone). On Hostinger the
+  // app starts with `node .next/standalone/server.js`; scripts/postbuild.mjs
+  // copies static assets, public/ and the MySQL migrations next to it.
   output: "standalone",
+  serverExternalPackages: ["mysql2"],
   experimental: {
-    turbopackPluginRuntimeStrategy: "workerThreads",
-    cpus: 4,
+    // Shared hosting limits processes/threads: build with a single worker.
+    cpus: 1,
+    workerThreads: false,
+    staticGenerationMaxConcurrency: 1,
   },
   // Stop `next dev` from overwriting the repo's hand-written AGENTS.md.
   agentRules: false,
