@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/supabase/types';
 import { PAGE_SIZE } from '@/lib/supabase/paged-query';
 import { fetchAccountTags, fetchAccountTemplates } from './account-catalog';
 

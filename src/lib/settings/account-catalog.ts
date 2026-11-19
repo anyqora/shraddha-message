@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/supabase/types';
 import { fetchAllPages } from '@/lib/supabase/paged-query';
 import type { MessageTemplate, Tag } from '@/types';
 

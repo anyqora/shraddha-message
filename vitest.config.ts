@@ -3,7 +3,11 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     tsconfigPaths: true,
-    alias: { "@app-messages": new URL("./messages/en.json", import.meta.url).pathname },
+    alias: {
+      "@app-messages": new URL("./messages/en.json", import.meta.url).pathname,
+      // Next resolves `server-only` itself; under vitest it is a no-op module.
+      "server-only": new URL("./node_modules/next/dist/compiled/server-only/empty.js", import.meta.url).pathname,
+    },
   },
   test: {
     environment: "node",

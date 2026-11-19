@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@/lib/supabase/admin'
 
 // Lazy, shared service-role client for automation engine work.
 // Mirrors the pattern used by the webhook handler

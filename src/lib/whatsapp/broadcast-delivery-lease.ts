@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/supabase/types';
 
 /**
  * How long a `delivery_locked_at` stamp is honoured before it is read

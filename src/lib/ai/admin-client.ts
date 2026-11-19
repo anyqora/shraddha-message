@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@/lib/supabase/admin'
 
 // Lazy, shared service-role client for the AI auto-reply path.
 // Mirrors src/lib/flows/admin-client.ts and src/lib/automations/admin-client.ts

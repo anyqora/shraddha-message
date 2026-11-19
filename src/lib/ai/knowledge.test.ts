@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@/lib/supabase/types'
 
 const h = vi.hoisted(() => ({ embedTexts: vi.fn() }))
 vi.mock('./embeddings', () => ({

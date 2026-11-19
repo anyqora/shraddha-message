@@ -14,7 +14,7 @@
 // sends landed in the Inbox as empty bubbles.
 // ============================================================
 
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@/lib/supabase/types';
 
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard';
 import { extractTemplateVariables } from '@/lib/whatsapp/template-validators';
