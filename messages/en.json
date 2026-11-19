@@ -41,7 +41,18 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Profile",
     "menuSettings": "Settings",
-    "menuSignOut": "Sign out"
+    "menuSignOut": "Sign out",
+    "companies": "Companies",
+    "tasks": "Tasks",
+    "search": "Search",
+    "workspaceSection": "Workspace",
+    "collapse": "Collapse menu",
+    "expand": "Expand menu",
+    "resize": "Resize menu",
+    "lightMode": "Light mode",
+    "darkMode": "Dark mode",
+    "openMenu": "Open menu",
+    "openAccountMenu": "Open workspace menu"
   },
   "Header": {
     "dashboard": "Dashboard",
@@ -577,7 +588,9 @@
       "toastBulkDeleted": "{count} contacts deleted",
       "filterByTag": "Filter by {name}",
       "removeTagFilter": "Remove {name} filter",
-      "selectContact": "Select {name}"
+      "selectContact": "Select {name}",
+      "optedOutShort": "Opted out",
+      "optedOutTitle": "This contact is excluded from all broadcasts"
     },
     "form": {
       "addTitle": "Add Contact",
@@ -677,13 +690,21 @@
       "toastCustomFieldsFailed": "Failed to save custom fields",
       "toastTemplateSent": "Template \"{name}\" sent",
       "toastTemplateFailed": "Failed to send template: {reason}",
-      "networkError": "network error"
+      "networkError": "network error",
+      "toastOptOutFailed": "Could not update broadcast subscription.",
+      "toastOptedOut": "Contact opted out of broadcasts",
+      "toastOptedIn": "Contact re-subscribed to broadcasts",
+      "optedOutBadge": "Opted out of broadcasts",
+      "optedOutByKeyword": "Opted out (replied STOP)",
+      "subscribedBadge": "Receives broadcasts",
+      "optOutBtn": "Opt out",
+      "optInBtn": "Re-subscribe"
     },
     "importModal": {
       "title": "Import Contacts",
-      "desc": "Upload a CSV with a required <phoneCode>phone</phoneCode> column. Optional: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (comma-separated; quote multi-tag cells).",
-      "uploadDropzone": "Click to choose a CSV file",
-      "uploadHint": ".csv up to your browser limit",
+      "desc": "Upload a CSV or Excel (.xlsx) file with a <phoneCode>phone</phoneCode> column, then map each column to <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> or any custom field (Location, Order ID…).",
+      "uploadDropzone": "Click to choose a CSV or Excel file",
+      "uploadHint": ".csv or .xlsx — the first sheet is imported",
       "rowsReady": "{count} row ready",
       "rowsReady_plural": "{count} rows ready",
       "preview": "Preview · first {count}",
@@ -714,7 +735,7 @@
       "close": "Close",
       "importBtn": "Import {count} contact",
       "importBtn_plural": "Import {count} contacts",
-      "toastNoValidRows": "No valid rows found. Ensure CSV has a \"phone\" column header.",
+      "toastNoValidRows": "No data rows found. The first row must contain column headers.",
       "toastTagsWarning": "Contacts imported, but some tag assignments failed.",
       "toastImported": "{count} contact imported",
       "toastImported_plural": "{count} contacts imported",
@@ -730,7 +751,29 @@
       "toastError": "Import failed",
       "notAuthenticated": "Not authenticated",
       "notLinkedToAccount": "Your profile is not linked to an account.",
-      "toastTagsSkippedMore": " (+{count} more)"
+      "toastTagsSkippedMore": " (+{count} more)",
+      "toastUnreadableFile": "Could not read this file. Save it as .csv or .xlsx and try again.",
+      "toastFieldCreateFailed": "Could not create custom field \"{name}\" — its values were skipped.",
+      "toastCustomValuesWarning": "Contacts imported, but some custom field values could not be saved.",
+      "mappingHeading": "Map columns",
+      "mappingColumn": "Column",
+      "mappingSample": "Sample",
+      "mappingTarget": "Import as",
+      "mappingSelectLabel": "Import column {column} as",
+      "mappingNeedsPhone": "Map one column to Phone to continue.",
+      "mappingDuplicate": "Two columns are mapped to the same field — change one of them.",
+      "updateExisting": "Update custom fields of contacts that already exist",
+      "resultCustomValues": "{count, plural, =1 {# field value saved} other {# field values saved}}",
+      "resultExistingUpdated": "{count, plural, =1 {# existing contact updated} other {# existing contacts updated}}",
+      "targets": {
+        "ignore": "Don't import",
+        "contactGroup": "Contact",
+        "optOut": "Opted out (yes/no)",
+        "customGroup": "Custom fields",
+        "newCustom": "+ New custom field \"{name}\""
+      },
+      "defaultCountryLabel": "Numbers without +:",
+      "defaultCountryNone": "Reject (require + and country code)"
     },
     "customFields": {
       "title": "Custom fields",
@@ -892,7 +935,8 @@
       },
       "errorLoad": "Failed to load broadcasts",
       "broadcastInProgress": "Broadcast in progress",
-      "retry": "Retry"
+      "retry": "Retry",
+      "scheduledFor": "for {when}"
     },
     "status": {
       "draft": "Draft",
@@ -954,7 +998,15 @@
       "toastResumeStartedCapped": "Sending {count} recipients in the background. {remaining} more will need another run.",
       "toastResumeFailed": "Could not resume: {error}",
       "unknownError": "Unknown error",
-      "unknownContact": "Unknown"
+      "unknownContact": "Unknown",
+      "scheduledTitle": "Scheduled for {when}",
+      "scheduledHint": "{count, plural, =1 {# recipient is} other {# recipients are}} queued. Sending starts automatically at the scheduled time.",
+      "sendScheduledNow": "Send now",
+      "cancelSchedule": "Cancel schedule",
+      "toastScheduleCancelled": "Schedule cancelled — the broadcast is now a draft.",
+      "toastCancelScheduleFailed": "Could not cancel: {error}",
+      "unsentDraftTitle": "Not sent yet",
+      "unsentDraftHint": "{count, plural, =1 {# recipient is} other {# recipients are}} waiting. Send whenever you're ready."
     },
     "new": {
       "title": "New Broadcast",
@@ -972,7 +1024,8 @@
       "toastDraftSaved": "Draft saved",
       "broadcastFailed": "Broadcast failed",
       "toastSendTakenOver": "Another delivery took over this broadcast, so this tab stopped sending. Open the broadcast to follow its progress.",
-      "toastSendInterrupted": "Sending stopped because the connection to the server dropped. Open the broadcast and select Resume sending to reach the remaining recipients. The button appears within 5 minutes."
+      "toastSendInterrupted": "Sending stopped because the connection to the server dropped. Open the broadcast and select Resume sending to reach the remaining recipients. The button appears within 5 minutes.",
+      "toastScheduled": "Broadcast scheduled for {when}"
     },
     "wizard": {
       "next": "Next",
@@ -1084,7 +1137,15 @@
         "estimatedReach": "Estimated Reach",
         "language": "Language",
         "confirmTitle": "Confirm Broadcast",
-        "confirmDesc": "You are about to send this broadcast to <b>{count, number}</b> {count, plural, =1 {contact} other {contacts}} using the <b>{template}</b> template. This action cannot be undone."
+        "confirmDesc": "You are about to send this broadcast to <b>{count, number}</b> {count, plural, =1 {contact} other {contacts}} using the <b>{template}</b> template. This action cannot be undone.",
+        "whenTitle": "When",
+        "modeNow": "Send now",
+        "modeLater": "Schedule for later",
+        "scheduleAtLabel": "Date and time (your local time)",
+        "scheduleTooSoon": "Pick a time at least one minute from now.",
+        "scheduleHint": "Recipients and variables are fixed now; contacts who opt out before the send are skipped.",
+        "scheduleButton": "Schedule Broadcast",
+        "confirmScheduleDesc": "This broadcast will be sent to <b>{count, number}</b> {count, plural, =1 {contact} other {contacts}} using the <b>{template}</b> template on <b>{when}</b>. You can cancel it until then."
       }
     },
     "sending": {
@@ -2934,5 +2995,12 @@
       "metaApiStatus": "Meta API error: {status}",
       "syncFailed": "Failed to sync templates"
     }
+  },
+  "Workspace": {
+    "search": "Search",
+    "newRecord": "New record",
+    "record": "Record",
+    "closePanel": "Close panel",
+    "resizePanel": "Resize panel"
   }
 }

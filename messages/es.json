@@ -41,7 +41,18 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configuración",
-    "menuSignOut": "Cerrar sesión"
+    "menuSignOut": "Cerrar sesión",
+    "companies": "Empresas",
+    "tasks": "Tareas",
+    "search": "Buscar",
+    "workspaceSection": "Espacio de trabajo",
+    "collapse": "Contraer menú",
+    "expand": "Expandir menú",
+    "resize": "Cambiar tamaño del menú",
+    "lightMode": "Modo claro",
+    "darkMode": "Modo oscuro",
+    "openMenu": "Abrir menú",
+    "openAccountMenu": "Abrir menú del espacio"
   },
   "Header": {
     "dashboard": "Panel",
@@ -577,7 +588,9 @@
       "toastBulkDeleted": "{count} contactos eliminados",
       "filterByTag": "Filtrar por {name}",
       "removeTagFilter": "Quitar el filtro {name}",
-      "selectContact": "Seleccionar {name}"
+      "selectContact": "Seleccionar {name}",
+      "optedOutShort": "Baja",
+      "optedOutTitle": "Este contacto está excluido de todas las difusiones"
     },
     "form": {
       "addTitle": "Agregar contacto",
@@ -677,13 +690,21 @@
       "toastCustomFieldsFailed": "Error al guardar los campos personalizados",
       "toastTemplateSent": "Plantilla \"{name}\" enviada",
       "toastTemplateFailed": "Error al enviar la plantilla: {reason}",
-      "networkError": "error de red"
+      "networkError": "error de red",
+      "toastOptOutFailed": "No se pudo actualizar la suscripción a difusiones.",
+      "toastOptedOut": "Contacto dado de baja de las difusiones",
+      "toastOptedIn": "Contacto suscrito de nuevo a las difusiones",
+      "optedOutBadge": "Baja de difusiones",
+      "optedOutByKeyword": "Baja (respondió STOP)",
+      "subscribedBadge": "Recibe difusiones",
+      "optOutBtn": "Dar de baja",
+      "optInBtn": "Volver a suscribir"
     },
     "importModal": {
       "title": "Importar contactos",
-      "desc": "Sube un CSV con una columna <phoneCode>phone</phoneCode> obligatoria. Opcionales: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por comas; pon entre comillas las celdas con varias etiquetas).",
-      "uploadDropzone": "Haz clic para elegir un archivo CSV",
-      "uploadHint": ".csv hasta el límite de tu navegador",
+      "desc": "Sube un archivo CSV o Excel (.xlsx) con una columna <phoneCode>phone</phoneCode> y asigna cada columna a <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> o a cualquier campo personalizado (Ubicación, ID de pedido…).",
+      "uploadDropzone": "Haz clic para elegir un archivo CSV o Excel",
+      "uploadHint": ".csv o .xlsx — se importa la primera hoja",
       "rowsReady": "{count} fila lista",
       "rowsReady_plural": "{count} filas listas",
       "preview": "Vista previa · primeras {count}",
@@ -714,7 +735,7 @@
       "close": "Cerrar",
       "importBtn": "Importar {count} contacto",
       "importBtn_plural": "Importar {count} contactos",
-      "toastNoValidRows": "No se encontraron filas válidas. Asegúrate de que el CSV tenga un encabezado de columna \"phone\".",
+      "toastNoValidRows": "No se encontraron filas de datos. La primera fila debe contener los encabezados.",
       "toastTagsWarning": "Contactos importados, pero algunas asignaciones de etiquetas fallaron.",
       "toastImported": "{count} contacto importado",
       "toastImported_plural": "{count} contactos importados",
@@ -730,7 +751,29 @@
       "toastError": "Error en la importación",
       "notAuthenticated": "No autenticado",
       "notLinkedToAccount": "Tu perfil no está vinculado a una cuenta.",
-      "toastTagsSkippedMore": " (+{count} más)"
+      "toastTagsSkippedMore": " (+{count} más)",
+      "toastUnreadableFile": "No se pudo leer el archivo. Guárdalo como .csv o .xlsx e inténtalo de nuevo.",
+      "toastFieldCreateFailed": "No se pudo crear el campo \"{name}\"; sus valores se omitieron.",
+      "toastCustomValuesWarning": "Contactos importados, pero algunos valores de campos personalizados no se guardaron.",
+      "mappingHeading": "Asignar columnas",
+      "mappingColumn": "Columna",
+      "mappingSample": "Ejemplo",
+      "mappingTarget": "Importar como",
+      "mappingSelectLabel": "Importar la columna {column} como",
+      "mappingNeedsPhone": "Asigna una columna a Teléfono para continuar.",
+      "mappingDuplicate": "Dos columnas están asignadas al mismo campo; cambia una de ellas.",
+      "updateExisting": "Actualizar campos personalizados de contactos existentes",
+      "resultCustomValues": "{count, plural, =1 {# valor de campo guardado} other {# valores de campo guardados}}",
+      "resultExistingUpdated": "{count, plural, =1 {# contacto existente actualizado} other {# contactos existentes actualizados}}",
+      "targets": {
+        "ignore": "No importar",
+        "contactGroup": "Contacto",
+        "optOut": "Baja (sí/no)",
+        "customGroup": "Campos personalizados",
+        "newCustom": "+ Nuevo campo personalizado \"{name}\""
+      },
+      "defaultCountryLabel": "Números sin +:",
+      "defaultCountryNone": "Rechazar (exigir + y código de país)"
     },
     "customFields": {
       "title": "Campos personalizados",
@@ -892,7 +935,8 @@
       },
       "errorLoad": "Error al cargar las difusiones",
       "broadcastInProgress": "Difusión en curso",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "scheduledFor": "para {when}"
     },
     "status": {
       "draft": "Borrador",
@@ -954,7 +998,15 @@
       "toastResumeStartedCapped": "Enviando a {count} destinatarios en segundo plano. Otros {remaining} necesitarán otra ejecución.",
       "toastResumeFailed": "No se pudo reanudar: {error}",
       "unknownError": "Error desconocido",
-      "unknownContact": "Desconocido"
+      "unknownContact": "Desconocido",
+      "scheduledTitle": "Programada para {when}",
+      "scheduledHint": "{count, plural, =1 {# destinatario en cola} other {# destinatarios en cola}}. El envío empieza automáticamente a la hora programada.",
+      "sendScheduledNow": "Enviar ahora",
+      "cancelSchedule": "Cancelar programación",
+      "toastScheduleCancelled": "Programación cancelada: la difusión ahora es un borrador.",
+      "toastCancelScheduleFailed": "No se pudo cancelar: {error}",
+      "unsentDraftTitle": "Aún no enviada",
+      "unsentDraftHint": "{count, plural, =1 {# destinatario en espera} other {# destinatarios en espera}}. Envía cuando quieras."
     },
     "new": {
       "title": "Nueva difusión",
@@ -972,7 +1024,8 @@
       "toastDraftSaved": "Borrador guardado",
       "broadcastFailed": "Falló la difusión",
       "toastSendTakenOver": "Otro envío tomó el control de esta difusión, así que esta pestaña dejó de enviar. Abre la difusión para seguir su progreso.",
-      "toastSendInterrupted": "El envío se detuvo porque se perdió la conexión con el servidor. Abre la difusión y usa Reanudar envío para enviar a los destinatarios restantes. El botón aparece en un máximo de 5 minutos."
+      "toastSendInterrupted": "El envío se detuvo porque se perdió la conexión con el servidor. Abre la difusión y usa Reanudar envío para enviar a los destinatarios restantes. El botón aparece en un máximo de 5 minutos.",
+      "toastScheduled": "Difusión programada para {when}"
     },
     "wizard": {
       "next": "Siguiente",
@@ -1084,7 +1137,15 @@
         "estimatedReach": "Alcance estimado",
         "language": "Idioma",
         "confirmTitle": "Confirmar difusión",
-        "confirmDesc": "Estás a punto de enviar esta difusión a <b>{count, number}</b> {count, plural, =1 {contacto} other {contactos}} con la plantilla <b>{template}</b>. Esta acción no se puede deshacer."
+        "confirmDesc": "Estás a punto de enviar esta difusión a <b>{count, number}</b> {count, plural, =1 {contacto} other {contactos}} con la plantilla <b>{template}</b>. Esta acción no se puede deshacer.",
+        "whenTitle": "Cuándo",
+        "modeNow": "Enviar ahora",
+        "modeLater": "Programar",
+        "scheduleAtLabel": "Fecha y hora (tu hora local)",
+        "scheduleTooSoon": "Elige una hora al menos un minuto en el futuro.",
+        "scheduleHint": "Los destinatarios y variables se fijan ahora; quien se dé de baja antes del envío se omite.",
+        "scheduleButton": "Programar difusión",
+        "confirmScheduleDesc": "Esta difusión se enviará a <b>{count, number}</b> {count, plural, =1 {contacto} other {contactos}} con la plantilla <b>{template}</b> el <b>{when}</b>. Puedes cancelarla hasta entonces."
       }
     },
     "sending": {
@@ -2934,5 +2995,12 @@
       "metaApiStatus": "Error de la API de Meta: {status}",
       "syncFailed": "Error al sincronizar las plantillas"
     }
+  },
+  "Workspace": {
+    "search": "Buscar",
+    "newRecord": "Nuevo registro",
+    "record": "Registro",
+    "closePanel": "Cerrar panel",
+    "resizePanel": "Cambiar tamaño del panel"
   }
 }

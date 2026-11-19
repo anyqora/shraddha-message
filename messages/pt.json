@@ -41,7 +41,18 @@
     "defaultAvatar": "Avatar",
     "menuProfile": "Perfil",
     "menuSettings": "Configurações",
-    "menuSignOut": "Sair"
+    "menuSignOut": "Sair",
+    "companies": "Empresas",
+    "tasks": "Tarefas",
+    "search": "Pesquisar",
+    "workspaceSection": "Espaço de trabalho",
+    "collapse": "Recolher menu",
+    "expand": "Expandir menu",
+    "resize": "Redimensionar menu",
+    "lightMode": "Modo claro",
+    "darkMode": "Modo escuro",
+    "openMenu": "Abrir menu",
+    "openAccountMenu": "Abrir menu do espaço"
   },
   "Header": {
     "dashboard": "Painel",
@@ -577,7 +588,9 @@
       "toastBulkDeleted": "{count} contatos excluídos",
       "filterByTag": "Filtrar por {name}",
       "removeTagFilter": "Remover o filtro {name}",
-      "selectContact": "Selecionar {name}"
+      "selectContact": "Selecionar {name}",
+      "optedOutShort": "Descadastrado",
+      "optedOutTitle": "Este contato é excluído de todas as transmissões"
     },
     "form": {
       "addTitle": "Adicionar contato",
@@ -677,13 +690,21 @@
       "toastCustomFieldsFailed": "Falha ao salvar os campos personalizados",
       "toastTemplateSent": "Modelo \"{name}\" enviado",
       "toastTemplateFailed": "Falha ao enviar o modelo: {reason}",
-      "networkError": "erro de rede"
+      "networkError": "erro de rede",
+      "toastOptOutFailed": "Não foi possível atualizar a inscrição em transmissões.",
+      "toastOptedOut": "Contato removido das transmissões",
+      "toastOptedIn": "Contato reinscrito nas transmissões",
+      "optedOutBadge": "Fora das transmissões",
+      "optedOutByKeyword": "Descadastrado (respondeu STOP)",
+      "subscribedBadge": "Recebe transmissões",
+      "optOutBtn": "Descadastrar",
+      "optInBtn": "Reinscrever"
     },
     "importModal": {
       "title": "Importar contatos",
-      "desc": "Envie um CSV com uma coluna <phoneCode>phone</phoneCode> obrigatória. Opcionais: <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> (separadas por vírgula; coloque células com várias tags entre aspas).",
-      "uploadDropzone": "Clique para escolher um arquivo CSV",
-      "uploadHint": ".csv até o limite do seu navegador",
+      "desc": "Envie um arquivo CSV ou Excel (.xlsx) com uma coluna <phoneCode>phone</phoneCode> e associe cada coluna a <nameCode>name</nameCode>, <emailCode>email</emailCode>, <companyCode>company</companyCode>, <tagsCode>tags</tagsCode> ou a qualquer campo personalizado (Local, ID do pedido…).",
+      "uploadDropzone": "Clique para escolher um arquivo CSV ou Excel",
+      "uploadHint": ".csv ou .xlsx — a primeira planilha é importada",
       "rowsReady": "{count} linha pronta",
       "rowsReady_plural": "{count} linhas prontas",
       "preview": "Pré-visualização · primeiras {count}",
@@ -714,7 +735,7 @@
       "close": "Fechar",
       "importBtn": "Importar {count} contato",
       "importBtn_plural": "Importar {count} contatos",
-      "toastNoValidRows": "Nenhuma linha válida encontrada. Verifique se o CSV tem um cabeçalho de coluna \"phone\".",
+      "toastNoValidRows": "Nenhuma linha de dados encontrada. A primeira linha deve conter os cabeçalhos.",
       "toastTagsWarning": "Contatos importados, mas algumas atribuições de tag falharam.",
       "toastImported": "{count} contato importado",
       "toastImported_plural": "{count} contatos importados",
@@ -730,7 +751,29 @@
       "toastError": "Falha na importação",
       "notAuthenticated": "Não autenticado",
       "notLinkedToAccount": "Seu perfil não está vinculado a uma conta.",
-      "toastTagsSkippedMore": " (+{count} outros)"
+      "toastTagsSkippedMore": " (+{count} outros)",
+      "toastUnreadableFile": "Não foi possível ler o arquivo. Salve como .csv ou .xlsx e tente novamente.",
+      "toastFieldCreateFailed": "Não foi possível criar o campo \"{name}\" — os valores foram ignorados.",
+      "toastCustomValuesWarning": "Contatos importados, mas alguns valores de campos personalizados não foram salvos.",
+      "mappingHeading": "Mapear colunas",
+      "mappingColumn": "Coluna",
+      "mappingSample": "Exemplo",
+      "mappingTarget": "Importar como",
+      "mappingSelectLabel": "Importar a coluna {column} como",
+      "mappingNeedsPhone": "Associe uma coluna a Telefone para continuar.",
+      "mappingDuplicate": "Duas colunas estão associadas ao mesmo campo — altere uma delas.",
+      "updateExisting": "Atualizar campos personalizados de contatos existentes",
+      "resultCustomValues": "{count, plural, =1 {# valor de campo salvo} other {# valores de campo salvos}}",
+      "resultExistingUpdated": "{count, plural, =1 {# contato existente atualizado} other {# contatos existentes atualizados}}",
+      "targets": {
+        "ignore": "Não importar",
+        "contactGroup": "Contato",
+        "optOut": "Descadastrado (sim/não)",
+        "customGroup": "Campos personalizados",
+        "newCustom": "+ Novo campo personalizado \"{name}\""
+      },
+      "defaultCountryLabel": "Números sem +:",
+      "defaultCountryNone": "Rejeitar (exigir + e código do país)"
     },
     "customFields": {
       "title": "Campos personalizados",
@@ -892,7 +935,8 @@
       },
       "errorLoad": "Falha ao carregar os disparos",
       "broadcastInProgress": "Disparo em andamento",
-      "retry": "Tentar novamente"
+      "retry": "Tentar novamente",
+      "scheduledFor": "para {when}"
     },
     "status": {
       "draft": "Rascunho",
@@ -954,7 +998,15 @@
       "toastResumeStartedCapped": "Enviando para {count} destinatários em segundo plano. Outros {remaining} precisarão de mais uma execução.",
       "toastResumeFailed": "Não foi possível retomar: {error}",
       "unknownError": "Erro desconhecido",
-      "unknownContact": "Desconhecido"
+      "unknownContact": "Desconhecido",
+      "scheduledTitle": "Agendada para {when}",
+      "scheduledHint": "{count, plural, =1 {# destinatário na fila} other {# destinatários na fila}}. O envio começa automaticamente no horário agendado.",
+      "sendScheduledNow": "Enviar agora",
+      "cancelSchedule": "Cancelar agendamento",
+      "toastScheduleCancelled": "Agendamento cancelado — a transmissão virou rascunho.",
+      "toastCancelScheduleFailed": "Não foi possível cancelar: {error}",
+      "unsentDraftTitle": "Ainda não enviada",
+      "unsentDraftHint": "{count, plural, =1 {# destinatário aguardando} other {# destinatários aguardando}}. Envie quando quiser."
     },
     "new": {
       "title": "Novo disparo",
@@ -972,7 +1024,8 @@
       "toastDraftSaved": "Rascunho salvo",
       "broadcastFailed": "Falha no disparo",
       "toastSendTakenOver": "Outro envio assumiu esta transmissão, então esta aba parou de enviar. Abra a transmissão para acompanhar o progresso.",
-      "toastSendInterrupted": "O envio parou porque a conexão com o servidor caiu. Abra a transmissão e use Retomar envio para enviar aos destinatários restantes. O botão aparece em até 5 minutos."
+      "toastSendInterrupted": "O envio parou porque a conexão com o servidor caiu. Abra a transmissão e use Retomar envio para enviar aos destinatários restantes. O botão aparece em até 5 minutos.",
+      "toastScheduled": "Transmissão agendada para {when}"
     },
     "wizard": {
       "next": "Avançar",
@@ -1084,7 +1137,15 @@
         "estimatedReach": "Alcance estimado",
         "language": "Idioma",
         "confirmTitle": "Confirmar disparo",
-        "confirmDesc": "Você está prestes a enviar este disparo para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} usando o modelo <b>{template}</b>. Esta ação não pode ser desfeita."
+        "confirmDesc": "Você está prestes a enviar este disparo para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} usando o modelo <b>{template}</b>. Esta ação não pode ser desfeita.",
+        "whenTitle": "Quando",
+        "modeNow": "Enviar agora",
+        "modeLater": "Agendar",
+        "scheduleAtLabel": "Data e hora (seu horário local)",
+        "scheduleTooSoon": "Escolha um horário a pelo menos um minuto de agora.",
+        "scheduleHint": "Destinatários e variáveis são definidos agora; quem se descadastrar antes do envio é ignorado.",
+        "scheduleButton": "Agendar transmissão",
+        "confirmScheduleDesc": "Esta transmissão será enviada para <b>{count, number}</b> {count, plural, =1 {contato} other {contatos}} com o modelo <b>{template}</b> em <b>{when}</b>. Você pode cancelar até lá."
       }
     },
     "sending": {
@@ -2934,5 +2995,12 @@
       "metaApiStatus": "Erro da API da Meta: {status}",
       "syncFailed": "Falha ao sincronizar os modelos"
     }
+  },
+  "Workspace": {
+    "search": "Pesquisar",
+    "newRecord": "Novo registro",
+    "record": "Registro",
+    "closePanel": "Fechar painel",
+    "resizePanel": "Redimensionar painel"
   }
 }
